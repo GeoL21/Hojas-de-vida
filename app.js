@@ -12,7 +12,7 @@
 
 'use strict';
 
-const VERSION_APP = '1.1.1';
+const VERSION_APP = '1.1.2';
 const PREF = 'hojas-vida:';   // prefijo propio en el almacenamiento (paso 8 de la skill)
 
 const FORMATO = { codigo: 'FMT-004', version: '1', fecha: '25/03/2012' };
@@ -1504,7 +1504,7 @@ async function construirPdf(e) {
   const doc = new jsPDF({ unit: 'mm', format: 'letter', orientation: 'portrait', compress: true });
   const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), M = 12;
   // Estilo «Ficha técnica»: encabezado vino, recuadros grises suaves y datos en cuadrícula
-  const VINO = [132, 48, 63], TINTA = [34, 34, 34], SUAVE = [110, 110, 110], ETQ = [136, 136, 136], NUM = [185, 138, 147];
+  const VINO = [132, 48, 63], TINTA = [34, 34, 34], SUAVE = [110, 110, 110], ETQ = [74, 52, 58], NUM = [132, 48, 63];
   const PANEL = [247, 244, 245], RAYA = [233, 225, 227], CABT = [238, 229, 231];
   const logo = await logoPdf();
   const ARRIBA = 40, ABAJO = H - 14;
@@ -1529,12 +1529,15 @@ async function construirPdf(e) {
       doc.addImage(src, 'JPEG', x + (w - t.w * s2) / 2, y + (h - t.h * s2) / 2, t.w * s2, t.h * s2);
     }
   }
-  function titulo(n, t, x, y) {
-    letra(9.5, true); color(NUM); doc.text(String(n), x, y);
-    color(VINO); doc.text(t.toUpperCase(), x + 4.5, y, { charSpace: 0.25 });
+  function titulo(n, t, x, y, blanco) {
+    letra(9.5, true);
+    if (blanco) doc.setTextColor(255, 204, 212); else color(NUM);
+    doc.text(String(n), x, y);
+    if (blanco) doc.setTextColor(255, 255, 255); else color(VINO);
+    doc.text(t.toUpperCase(), x + 4.5, y, { charSpace: 0.25 });
   }
   // Recuadro con borde, franja de título y cuadrícula de datos {e: etiqueta, v: valor, tipo}
-  const BORDE = [217, 204, 208], LINEAS = [230, 220, 223], FRANJA = [243, 236, 238], TITULO_ALTO = 9;
+  const BORDE = [196, 176, 182], LINEAS = [218, 206, 210], FRANJA = [242, 230, 233], TITULO_ALTO = 9;
   function medirCuadricula(items, cols, ancho) {
     const cw = ancho / cols, filas = [];
     for (let i = 0; i < items.length; i += cols) {
@@ -1580,7 +1583,7 @@ async function construirPdf(e) {
       const col = i % cols;
       if (col === 0 && i > 0) yy += med.filas[Math.floor(i / cols) - 1];
       const xx = x + col * med.cw + 4;
-      letra(6.8, false); color(ETQ); doc.text(it.e.toUpperCase(), xx, yy + 3.9, { charSpace: 0.15 });
+      letra(7.2, true); color(ETQ); doc.text(it.e.toUpperCase(), xx, yy + 3.9, { charSpace: 0.12 });
       const yv = yy + 8;
       if (it.tipo === 'estado') {
         const c = ESTADOS[it.v] || ESTADOS['Dado de baja'];
@@ -1653,7 +1656,7 @@ async function construirPdf(e) {
       startY: startY, margin: { left: M, right: M, top: ARRIBA, bottom: 16 }, theme: 'grid',
       styles: { font: 'helvetica', fontSize: 8.8, textColor: TINTA, lineColor: LINEAS, lineWidth: 0.2, cellPadding: { top: 1.8, bottom: 1.8, left: 2.5, right: 2.5 }, valign: 'top', fillColor: [255, 255, 255] },
       head: [['FECHA', 'TIPO', 'DESCRIPCIÓN', 'REALIZÓ', 'FIRMA']],
-      headStyles: { fillColor: [250, 246, 247], textColor: [102, 102, 102], fontStyle: 'bold', fontSize: 7.2 },
+      headStyles: { fillColor: [250, 246, 247], textColor: [74, 52, 58], fontStyle: 'bold', fontSize: 7.4 },
       body: filasMt.length ? filasMt : [[{ content: 'Sin intervenciones registradas', colSpan: 5, styles: { halign: 'center', textColor: SUAVE } }]],
       columnStyles: { 0: { cellWidth: 21 }, 1: { cellWidth: 22 }, 3: { cellWidth: 38 }, 4: { cellWidth: 28, minCellHeight: 13 } }
     };
