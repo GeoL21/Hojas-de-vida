@@ -12,7 +12,7 @@
 
 'use strict';
 
-const VERSION_APP = '1.0.4';
+const VERSION_APP = '1.1.0';
 const PREF = 'hojas-vida:';   // prefijo propio en el almacenamiento (paso 8 de la skill)
 
 const FORMATO = { codigo: 'FMT-004', version: '1', fecha: '25/03/2012' };
@@ -1470,7 +1470,7 @@ async function cargarLibreriasPdf() {
 let logoCache = null;
 async function logoPdf() {
   if (logoCache) return logoCache;
-  try { logoCache = await blobADataUrl(await (await fetch('logo.jpg')).blob()); } catch (e) { logoCache = null; }
+  try { logoCache = await blobADataUrl(await (await fetch('logo-pdf.png')).blob()); } catch (e) { logoCache = null; }
   return logoCache;
 }
 
@@ -1500,69 +1500,123 @@ async function construirPdf(e) {
   await cargarLibreriasPdf();
   const ms = mantsDe(e).slice().reverse();   // del más viejo al más nuevo
   await minisPara(e, ms);
-  const doc = new window.jspdf.jsPDF({ unit: 'mm', format: 'letter', orientation: 'portrait', compress: true });
+  const jsPDF = window.jspdf.jsPDF;
+  const doc = new jsPDF({ unit: 'mm', format: 'letter', orientation: 'portrait', compress: true });
   const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), M = 12;
-  const VINO = [132, 48, 63], TINTA = [22, 13, 14], SUAVE = [69, 52, 58], LINEA = [150, 150, 150];
+  // Estilo «Ficha técnica»: encabezado vino, recuadros grises suaves y datos en cuadrícula
+  const VINO = [132, 48, 63], TINTA = [34, 34, 34], SUAVE = [110, 110, 110], ETQ = [136, 136, 136], NUM = [185, 138, 147];
+  const PANEL = [247, 244, 245], RAYA = [233, 225, 227], CABT = [238, 229, 231];
   const logo = await logoPdf();
-  const ARRIBA = 38;   // donde empieza el contenido debajo del encabezado
-  const estilos = { font: 'helvetica', fontSize: 9, textColor: TINTA, lineColor: LINEA, lineWidth: 0.2, cellPadding: 1.25, valign: 'middle' };
-  const tituloSec = function(t) { return [{ content: t, colSpan: 4, styles: { fillColor: VINO, textColor: 255, fontStyle: 'bold' } }]; };
-  const k = function(t) { return { content: t, styles: { textColor: SUAVE, fontStyle: 'bold', fillColor: [245, 238, 239] } }; };
-  const v = function(t) { return { content: t || '—' }; };
+  const ARRIBA = 40, ABAJO = H - 14;
+  const color = function(c, tipo) { if (tipo === 'f') doc.setFillColor(c[0], c[1], c[2]); else if (tipo === 'd') doc.setDrawColor(c[0], c[1], c[2]); else doc.setTextColor(c[0], c[1], c[2]); };
+  const letra = function(tam, negrita) { doc.setFont('helvetica', negrita ? 'bold' : 'normal'); doc.setFontSize(tam); };
+  const nueva = function() { doc.addPage(); return ARRIBA; };
+  const val = function(t) { t = String(t == null ? '' : t).trim(); return t || '—'; };
+  const ESTADOS = { 'Funcionando': [[227, 244, 232], [30, 107, 58]], 'Con observaciones': [[255, 243, 220], [122, 74, 0]],
+    'Fuera de servicio': [[252, 228, 225], [179, 38, 30]], 'Dado de baja': [[236, 236, 236], [90, 90, 90]] };
+
+  // Imagen recortada para llenar el recuadro, con esquinas redondeadas
+  async function imagenCubre(src, x, y, w, h, r) {
+    const t = await tamImagen(src);
+    const s = Math.max(w / t.w, h / t.h), iw = t.w * s, ih = t.h * s;
+    try {
+      doc.saveGraphicsState();
+      doc.roundedRect(x, y, w, h, r, r, null); doc.clip(); doc.discardPath();
+      doc.addImage(src, 'JPEG', x + (w - iw) / 2, y + (h - ih) / 2, iw, ih);
+      doc.restoreGraphicsState();
+    } catch (err) {
+      const s2 = Math.min(w / t.w, h / t.h);
+      doc.addImage(src, 'JPEG', x + (w - t.w * s2) / 2, y + (h - t.h * s2) / 2, t.w * s2, t.h * s2);
+    }
+  }
+  function titulo(n, t, x, y) {
+    letra(9.5, true); color(NUM); doc.text(String(n), x, y);
+    color(VINO); doc.text(t.toUpperCase(), x + 4.5, y, { charSpace: 0.25 });
+  }
+  // Recuadro gris con título y cuadrícula de datos {e: etiqueta, v: valor, tipo}
+  function medirCuadricula(items, cols, ancho) {
+    const cw = (ancho - 8) / cols, filas = [];
+    for (let i = 0; i < items.length; i += cols) {
+      let alto = 0;
+      items.slice(i, i + cols).forEach(function(it) {
+        letra(9, true);
+        it.lineas = it.tipo ? [val(it.v)] : doc.splitTextToSize(val(it.v), cw - 3);
+        alto = Math.max(alto, 3.4 + it.lineas.length * 3.9 + (it.tipo ? 1.2 : 0));
+      });
+      filas.push(alto + 2.6);
+    }
+    return { cw: cw, filas: filas, alto: filas.reduce(function(a, b) { return a + b; }, 0) };
+  }
+  function bloque(n, t, items, cols, x, y, ancho, minAlto, nota) {
+    const med = medirCuadricula(items, cols, ancho);
+    let lineasNota = [];
+    if (nota) { letra(8.5, false); lineasNota = doc.splitTextToSize(nota, ancho - 8 - 26); }
+    const alto = Math.max(minAlto || 0, 11 + med.alto + (lineasNota.length ? lineasNota.length * 3.8 + 1.5 : 0) + 1.5);
+    color(PANEL, 'f'); doc.roundedRect(x, y, ancho, alto, 2.5, 2.5, 'F');
+    titulo(n, t, x + 4, y + 6.2);
+    let yy = y + 11;
+    items.forEach(function(it, i) {
+      const col = i % cols;
+      if (col === 0 && i > 0) yy += med.filas[Math.floor(i / cols) - 1];
+      const xx = x + 4 + col * med.cw;
+      letra(6.8, false); color(ETQ); doc.text(it.e.toUpperCase(), xx, yy + 1.8, { charSpace: 0.15 });
+      const yv = yy + 5.6;
+      if (it.tipo === 'estado') {
+        const c = ESTADOS[it.v] || ESTADOS['Dado de baja'];
+        letra(8, true); const tw = doc.getTextWidth(val(it.v));
+        color(c[0], 'f'); doc.roundedRect(xx, yv - 3.3, tw + 6, 4.8, 2.4, 2.4, 'F');
+        color(c[1]); doc.text(val(it.v), xx + 3, yv);
+      } else if (it.tipo === 'prox') {
+        letra(9, true); const tw = doc.getTextWidth(val(it.v));
+        color([255, 255, 255], 'f'); color(VINO, 'd'); doc.setLineWidth(0.3);
+        doc.roundedRect(xx, yv - 3.5, tw + 5, 5.2, 1.3, 1.3, 'FD');
+        color(VINO); doc.text(val(it.v), xx + 2.5, yv);
+      } else {
+        letra(9, true); color(TINTA); doc.text(it.lineas, xx, yv);
+      }
+    });
+    if (lineasNota.length) {
+      const yn = y + 11 + med.alto + 2;
+      letra(8.5, true); color(TINTA); doc.text('Recomendaciones:', x + 4, yn);
+      letra(8.5, false); doc.text(lineasNota, x + 4 + 26, yn);
+    }
+    return alto;
+  }
+  function bloqueEnPagina(n, t, items, cols, y, nota) {
+    const ancho = W - 2 * M;
+    const med = medirCuadricula(items, cols, ancho);
+    if (y + 14 + med.alto + (nota ? 10 : 0) > ABAJO) y = nueva();
+    return y + bloque(n, t, items, cols, M, y, ancho, 0, nota) + 4;
+  }
 
   // 1. Foto del equipo + identificación (la hoja de vida empieza con la foto)
   let y = ARRIBA;
   const foto = S.minis['EQ:' + e.id];
-  const fw = 78, fh = 58;
-  doc.setDrawColor(LINEA[0], LINEA[1], LINEA[2]); doc.setLineWidth(0.2);
-  doc.rect(M, y, fw, fh);
-  if (imgSegura(foto)) {
-    const t = await tamImagen(foto);
-    const esc2 = Math.min((fw - 2) / t.w, (fh - 2) / t.h);
-    const w = t.w * esc2, h = t.h * esc2;
-    doc.addImage(foto, 'JPEG', M + (fw - w) / 2, y + (fh - h) / 2, w, h);
-  } else {
-    doc.setFontSize(9); doc.setTextColor(SUAVE[0], SUAVE[1], SUAVE[2]);
-    doc.text('Sin foto del equipo', M + fw / 2, y + fh / 2, { align: 'center' });
+  const fw = 66, xi = M + fw + 4, ai = W - M - xi;
+  const ident = [{ e: 'Equipo', v: e.nombre }, { e: 'Código interno', v: e.codigo }, { e: 'Tipo', v: e.tipo },
+    { e: 'Marca', v: e.marca }, { e: 'Modelo', v: e.modelo }, { e: 'Serie', v: e.serie },
+    { e: 'Sede', v: e.sede }, { e: 'Ubicación', v: e.ubicacion }, { e: 'Estado', v: e.estado, tipo: 'estado' }];
+  const altoId = bloque(1, 'Identificación', ident, 3, xi, y, ai, 52);
+  if (imgSegura(foto)) await imagenCubre(foto, M, y, fw, altoId, 2.5);
+  else {
+    color(PANEL, 'f'); doc.roundedRect(M, y, fw, altoId, 2.5, 2.5, 'F');
+    letra(9, false); color(SUAVE); doc.text('Sin foto del equipo', M + fw / 2, y + altoId / 2, { align: 'center' });
   }
-  doc.autoTable({
-    startY: y, margin: { left: M + fw + 3, right: M, top: ARRIBA }, theme: 'grid', styles: estilos,
-    body: [
-      [{ content: '1. Identificación', colSpan: 2, styles: { fillColor: VINO, textColor: 255, fontStyle: 'bold' } }],
-      [k('Equipo'), v(e.nombre)], [k('Código interno'), v(e.codigo)], [k('Tipo'), v(e.tipo)],
-      [k('Marca'), v(e.marca)], [k('Modelo'), v(e.modelo)], [k('Serie'), v(e.serie)],
-      [k('Sede'), v(e.sede)], [k('Ubicación'), v(e.ubicacion)], [k('Estado'), v(e.estado)]
-    ],
-    columnStyles: { 0: { cellWidth: 32 } }
-  });
-  y = Math.max(y + fh, doc.lastAutoTable.finalY) + 4;
+  y += altoId + 4;
 
   const p = preventivo(e);
-  const tabla4 = function(titulo, filas) {
-    doc.autoTable({
-      startY: y, margin: { left: M, right: M, top: ARRIBA }, theme: 'grid', styles: estilos,
-      body: [tituloSec(titulo)].concat(filas),
-      columnStyles: { 0: { cellWidth: 40 }, 2: { cellWidth: 40 } }
-    });
-    y = doc.lastAutoTable.finalY + 4;
-  };
-  tabla4('2. Adquisición', [
-    [k('Proveedor'), v(e.proveedor), k('Forma de adquisición'), v(e.forma)],
-    [k('Fecha de instalación'), v(fFechaPdf(e.instalacion)), k('Garantía hasta'), v(fFechaPdf(e.garantia))],
-    [k('Registro INVIMA'), v(e.invima), k('Clasificación de riesgo'), v(e.riesgo)]
-  ]);
-  tabla4('3. Datos técnicos', [
-    [k('Potencia'), v(e.potencia), k('Voltaje'), v(e.voltaje)],
-    [k('Fases'), v(e.fases), k('Corriente'), v(e.corriente)],
-    [k('Caudal'), v(e.caudal), k('Presión de trabajo'), v(e.presion)],
-    [k('Lubricación'), v(e.lubricacion), k('Otros'), v(e.otros)]
-  ]);
-  tabla4('4. Plan de mantenimiento', [
-    [k('Periodicidad del preventivo'), v(e.periodicidad === 'Por horas de uso' ? 'Cada ' + num(e.cadaHoras) + ' h de uso' : e.periodicidad),
-      k('Responsable'), v(e.responsable === 'Proveedor' ? 'Proveedor: ' + (e.empresaMtto || '') : e.responsable)],
-    [k('Último preventivo'), v(fFechaPdf(p.ultimo)), k('Próximo preventivo'), v(p.proximo ? fFechaPdf(p.proximo) : p.texto)],
-    [k('Manual del fabricante'), v(e.manual), k('Recomendaciones'), v(e.recomendaciones)]
-  ]);
+  y = bloqueEnPagina(2, 'Adquisición', [{ e: 'Proveedor', v: e.proveedor }, { e: 'Forma de adquisición', v: e.forma },
+    { e: 'Fecha de instalación', v: fFechaPdf(e.instalacion) }, { e: 'Garantía hasta', v: fFechaPdf(e.garantia) },
+    { e: 'Registro INVIMA', v: e.invima }, { e: 'Clasificación de riesgo', v: e.riesgo }], 3, y);
+  y = bloqueEnPagina(3, 'Datos técnicos', [{ e: 'Potencia', v: e.potencia }, { e: 'Voltaje', v: e.voltaje },
+    { e: 'Fases', v: e.fases }, { e: 'Corriente', v: e.corriente }, { e: 'Caudal', v: e.caudal },
+    { e: 'Presión de trabajo', v: e.presion }, { e: 'Lubricación', v: e.lubricacion }, { e: 'Otros', v: e.otros }], 4, y);
+  y = bloqueEnPagina(4, 'Plan de mantenimiento', [
+    { e: 'Periodicidad del preventivo', v: e.periodicidad === 'Por horas de uso' ? 'Cada ' + num(e.cadaHoras) + ' h de uso' : e.periodicidad },
+    { e: 'Responsable', v: e.responsable === 'Proveedor' ? 'Proveedor: ' + (e.empresaMtto || '') : e.responsable },
+    { e: 'Último preventivo', v: fFechaPdf(p.ultimo) },
+    { e: 'Próximo preventivo', v: p.proximo ? fFechaPdf(p.proximo) : p.texto, tipo: p.proximo ? 'prox' : '' },
+    { e: 'Manual del fabricante', v: e.manual }], 3, y, String(e.recomendaciones || '').trim());
 
   // 5. Historial de intervenciones, con la firma de quien lo hizo
   const filasMt = ms.map(function(m) {
@@ -1572,89 +1626,93 @@ async function construirPdf(e) {
     return [fFechaPdf(m.fecha), m.tipo + (m.horometro !== '' && m.horometro != null ? '\n' + num(m.horometro) + ' h' : ''),
       m.descripcion + (m.repuestos ? '\nRepuestos: ' + m.repuestos : '') + (m.estadoFinal ? '\nQuedó: ' + m.estadoFinal : ''), quien, ''];
   });
-  doc.autoTable({
-    startY: y, margin: { left: M, right: M, top: ARRIBA }, theme: 'grid', styles: estilos,
-    head: [[{ content: '5. Historial de intervenciones', colSpan: 5, styles: { fillColor: VINO, textColor: 255, fontStyle: 'bold' } }],
-      ['Fecha', 'Tipo', 'Descripción', 'Realizó', 'Firma']],
-    headStyles: { fillColor: [238, 230, 231], textColor: TINTA, fontStyle: 'bold', lineColor: LINEA, lineWidth: 0.2 },
-    body: filasMt.length ? filasMt : [[{ content: 'Sin intervenciones registradas', colSpan: 5, styles: { halign: 'center', textColor: SUAVE } }]],
-    columnStyles: { 0: { cellWidth: 20 }, 1: { cellWidth: 25 }, 3: { cellWidth: 40 }, 4: { cellWidth: 28, minCellHeight: 13 } },
-    didDrawCell: function(dt) {
-      if (dt.section !== 'body' || dt.column.index !== 4 || !ms[dt.row.index]) return;
-      const fi = S.minis['FI:' + ms[dt.row.index].id];
-      if (imgSegura(fi)) doc.addImage(fi, 'PNG', dt.cell.x + 1, dt.cell.y + 1, dt.cell.width - 2, Math.min(dt.cell.height - 2, (dt.cell.width - 2) / 3));
+  const opcHist = function(startY, conMargen) {
+    return {
+      startY: startY, margin: { left: M + (conMargen ? 4 : 0), right: M + (conMargen ? 4 : 0), top: ARRIBA, bottom: 16 }, theme: 'plain',
+      styles: { font: 'helvetica', fontSize: 8.8, textColor: TINTA, cellPadding: { top: 1.8, bottom: 1.8, left: 2, right: 2 }, valign: 'top', fillColor: [255, 255, 255] },
+      head: [['FECHA', 'TIPO', 'DESCRIPCIÓN', 'REALIZÓ', 'FIRMA']],
+      headStyles: { fillColor: CABT, textColor: [102, 102, 102], fontStyle: 'bold', fontSize: 7.2 },
+      body: filasMt.length ? filasMt : [[{ content: 'Sin intervenciones registradas', colSpan: 5, styles: { halign: 'center', textColor: SUAVE } }]],
+      columnStyles: { 0: { cellWidth: 21 }, 1: { cellWidth: 22 }, 3: { cellWidth: 38 }, 4: { cellWidth: 28, minCellHeight: 13 } }
+    };
+  };
+  // Se mide primero en un documento aparte: si cabe en la página va dentro del recuadro gris
+  const prueba = new jsPDF({ unit: 'mm', format: 'letter' });
+  prueba.autoTable(opcHist(y + 10, true));
+  const cabe = prueba.lastAutoTable.finalY < ABAJO && prueba.getNumberOfPages() === 1;
+  if (!cabe && y + 40 > ABAJO) y = nueva();
+  const altoTabla = prueba.lastAutoTable.finalY - (y + 10);
+  if (cabe) { color(PANEL, 'f'); doc.roundedRect(M, y, W - 2 * M, altoTabla + 14, 2.5, 2.5, 'F'); }
+  titulo(5, 'Historial de intervenciones', M + 4, y + 6.2);
+  const oh = opcHist(y + 10, true);
+  oh.didDrawCell = function(dt) {
+    if (dt.section === 'body') {
+      color(RAYA, 'd'); doc.setLineWidth(0.2); doc.line(dt.cell.x, dt.cell.y + dt.cell.height, dt.cell.x + dt.cell.width, dt.cell.y + dt.cell.height);
     }
-  });
-  y = doc.lastAutoTable.finalY + 6;
+    if (dt.section !== 'body' || dt.column.index !== 4 || !ms[dt.row.index]) return;
+    const fi = S.minis['FI:' + ms[dt.row.index].id];
+    if (imgSegura(fi)) doc.addImage(fi, 'PNG', dt.cell.x + 1, dt.cell.y + 1.5, dt.cell.width - 2, Math.min(dt.cell.height - 3, (dt.cell.width - 2) / 3));
+  };
+  doc.autoTable(oh);
+  y = doc.lastAutoTable.finalY + (cabe ? 8 : 6);
 
   // Firmas Elaboró / Revisó
-  if (y + 24 > H - 12) { doc.addPage(); y = ARRIBA; }
+  if (y + 26 > ABAJO) y = nueva();
   const anchoF = (W - 2 * M - 10) / 2;
   [['Elaboró', nombreBonito(S.tecnico), 'Técnico de gases medicinales'], ['Revisó', S.cfg.coordinador || '', 'Coordinador de gases medicinales']].forEach(function(f, i) {
     const x = M + i * (anchoF + 10);
-    doc.setDrawColor(LINEA[0], LINEA[1], LINEA[2]);
-    doc.rect(x, y, anchoF, 23);
-    doc.setFontSize(9); doc.setTextColor(SUAVE[0], SUAVE[1], SUAVE[2]); doc.setFont('helvetica', 'bold');
-    doc.text(f[0] + ':', x + 3, y + 5);
-    doc.setDrawColor(TINTA[0], TINTA[1], TINTA[2]); doc.line(x + 8, y + 13.5, x + anchoF - 8, y + 13.5);
-    doc.setFont('helvetica', 'normal'); doc.setTextColor(TINTA[0], TINTA[1], TINTA[2]);
-    doc.text(f[1], x + anchoF / 2, y + 17.5, { align: 'center' });
-    if (f[1] !== f[2]) { doc.setTextColor(SUAVE[0], SUAVE[1], SUAVE[2]); doc.text(f[2], x + anchoF / 2, y + 21.2, { align: 'center' }); }
+    color([227, 215, 218], 'd'); doc.setLineWidth(0.3); doc.roundedRect(x, y, anchoF, 25, 2.5, 2.5, 'S');
+    letra(7.5, true); color(VINO); doc.text(f[0].toUpperCase(), x + 4, y + 5.5, { charSpace: 0.2 });
+    color([85, 85, 85], 'd'); doc.setLineWidth(0.25); doc.line(x + 8, y + 15, x + anchoF - 8, y + 15);
+    letra(9, true); color(TINTA); doc.text(f[1], x + anchoF / 2, y + 19, { align: 'center' });
+    if (f[1] !== f[2]) { letra(8, false); color(SUAVE); doc.text(f[2], x + anchoF / 2, y + 22.6, { align: 'center' }); }
   });
+  y += 25;
 
-  // Registro fotográfico (fotos de los mantenimientos)
+  // 6. Registro fotográfico (fotos de los mantenimientos; la del equipo ya va al inicio)
   const fotos = [];
   ms.slice().reverse().forEach(function(m) {
     for (let i = 1; i <= 4; i++) { const f = S.minis['MT:' + m.id + ':' + i]; if (imgSegura(f)) fotos.push({ src: f, txt: fFechaPdf(m.fecha) + ' · ' + m.tipo }); }
   });
   if (fotos.length) {
-    // Sigue en la misma página si cabe al menos una fila de fotos
-    y += 30;
-    if (y + 92 > H - 12) { doc.addPage(); y = ARRIBA; }
-    doc.setFillColor(VINO[0], VINO[1], VINO[2]); doc.rect(M, y, W - 2 * M, 7, 'F');
-    doc.setTextColor(255); doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5);
-    doc.text('6. Registro fotográfico', M + 2, y + 4.8);
     y += 10;
-    // Solo evidencias de mantenimientos: la foto del equipo ya va al inicio de la hoja
-    const lista = fotos;
     const cw = (W - 2 * M - 6) / 2, ch = 70;
-    for (let i = 0; i < lista.length; i++) {
+    if (y + 10 + ch + 8 > ABAJO) y = nueva();
+    titulo(6, 'Registro fotográfico', M + 1, y + 4);
+    color(RAYA, 'd'); doc.setLineWidth(0.3); doc.line(M, y + 6.5, W - M, y + 6.5);
+    y += 10;
+    for (let i = 0; i < fotos.length; i++) {
       const col = i % 2;
       if (col === 0 && i > 0) y += ch + 10;
-      if (y + ch + 8 > H - 12) { doc.addPage(); y = ARRIBA; }
+      if (y + ch + 8 > ABAJO) y = nueva();
       const x = M + col * (cw + 6);
-      const t = await tamImagen(lista[i].src);
-      const s = Math.min(cw / t.w, ch / t.h);
-      doc.setDrawColor(LINEA[0], LINEA[1], LINEA[2]); doc.rect(x, y, cw, ch);
-      doc.addImage(lista[i].src, 'JPEG', x + (cw - t.w * s) / 2, y + (ch - t.h * s) / 2, t.w * s, t.h * s);
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(SUAVE[0], SUAVE[1], SUAVE[2]);
-      doc.text(lista[i].txt, x + cw / 2, y + ch + 4.5, { align: 'center' });
+      color(PANEL, 'f'); doc.roundedRect(x, y, cw, ch, 2.5, 2.5, 'F');
+      const t = await tamImagen(fotos[i].src);
+      const s2 = Math.min(cw / t.w, ch / t.h), iw = t.w * s2, ih = t.h * s2;
+      await imagenCubre(fotos[i].src, x + (cw - iw) / 2, y + (ch - ih) / 2, iw, ih, 2.5);
+      letra(8, false); color(SUAVE); doc.text(fotos[i].txt, x + cw / 2, y + ch + 4.5, { align: 'center' });
     }
   }
 
-  // Encabezado del formato en todas las páginas: logo · título · código, versión, fecha y página
+  // Encabezado del formato en todas las páginas: franja vino con logo, título y código/versión/fecha/página
   const total = doc.getNumberOfPages();
   for (let n = 1; n <= total; n++) {
     doc.setPage(n);
-    const y0 = 10, alto = 24, c1 = 32, c3 = 52;
-    doc.setDrawColor(LINEA[0], LINEA[1], LINEA[2]); doc.setLineWidth(0.3);
-    doc.rect(M, y0, W - 2 * M, alto);
-    doc.line(M + c1, y0, M + c1, y0 + alto);
-    doc.line(W - M - c3, y0, W - M - c3, y0 + alto);
-    if (logo) doc.addImage(logo, 'JPEG', M + (c1 - 20) / 2, y0 + 2, 20, 20);
-    const cx = M + c1 + (W - 2 * M - c1 - c3) / 2;
-    doc.setTextColor(TINTA[0], TINTA[1], TINTA[2]); doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
-    doc.text('HOJA DE VIDA DE EQUIPO', cx, y0 + 9.5, { align: 'center' });
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5);
-    doc.text('Departamento de Gases Medicinales', cx, y0 + 15, { align: 'center' });
-    doc.setFontSize(8.5); doc.setTextColor(SUAVE[0], SUAVE[1], SUAVE[2]);
-    doc.text(e.codigo + ' · ' + e.nombre, cx, y0 + 20, { align: 'center', maxWidth: W - 2 * M - c1 - c3 - 4 });
-    const xs = W - M - c3 + 3;
-    doc.setFontSize(9); doc.setTextColor(TINTA[0], TINTA[1], TINTA[2]);
-    ['Código: ' + FORMATO.codigo, 'Versión: ' + FORMATO.version, 'Fecha: ' + FORMATO.fecha, 'Página: ' + n + ' de ' + total].forEach(function(t, i) {
-      doc.text(t, xs, y0 + 5.6 + i * 5.2);
+    const y0 = 10, alto = 25, x0 = M, an = W - 2 * M;
+    color(VINO, 'f'); doc.roundedRect(x0, y0, an, alto, 3, 3, 'F');
+    if (logo) doc.addImage(logo, 'PNG', x0 + 5, y0 + 2.5, 20, 20);
+    const xt = x0 + 30;
+    letra(14, true); doc.setTextColor(255, 255, 255); doc.text('HOJA DE VIDA DE EQUIPO', xt, y0 + 10, { charSpace: 0.2 });
+    letra(9.5, false); doc.setTextColor(250, 235, 238); doc.text('Departamento de Gases Medicinales', xt, y0 + 15.5);
+    letra(8.2, false); doc.setTextColor(225, 190, 198);
+    doc.text(e.codigo + ' · ' + e.nombre, xt, y0 + 20, { maxWidth: an - 30 - 48 });
+    const xe = x0 + an - 44, xv = x0 + an - 27;
+    [['Código', FORMATO.codigo], ['Versión', FORMATO.version], ['Fecha', FORMATO.fecha], ['Página', n + ' de ' + total]].forEach(function(f, i) {
+      const yy = y0 + 6.6 + i * 4.6;
+      letra(8.2, false); doc.setTextColor(225, 190, 198); doc.text(f[0], xe, yy);
+      letra(8.2, true); doc.setTextColor(255, 255, 255); doc.text(String(f[1]), xv, yy);
     });
-    doc.setFontSize(7.5); doc.setTextColor(SUAVE[0], SUAVE[1], SUAVE[2]);
+    letra(7.5, false); color(ETQ);
     doc.text('Generado el ' + fFechaPdf(hoyISO()) + ' a las ' + hora() + ' · Clínica Reina Catalina', W / 2, H - 6, { align: 'center' });
   }
   return doc.output('blob');

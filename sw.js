@@ -7,10 +7,10 @@
  *****************************************************************/
 
 const NOMBRE = 'hojas-vida';
-const VERSION = NOMBRE + '-v5';
+const VERSION = NOMBRE + '-v6';
 
 const ARCHIVOS = [
-  './', 'index.html', 'app.js', 'iconos.js', 'config.js', 'manifest.webmanifest', 'logo.jpg',
+  './', 'index.html', 'app.js', 'iconos.js', 'config.js', 'manifest.webmanifest', 'logo.jpg', 'logo-pdf.png',
   'icon-192.png?v=20261119', 'icon-512.png?v=20261119', 'icon-maskable-512.png?v=20261119',
   'lib/jspdf.umd.min.js', 'lib/jspdf.plugin.autotable.min.js'
 ];
