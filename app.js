@@ -12,7 +12,7 @@
 
 'use strict';
 
-const VERSION_APP = '1.1.0';
+const VERSION_APP = '1.1.1';
 const PREF = 'hojas-vida:';   // prefijo propio en el almacenamiento (paso 8 de la skill)
 
 const FORMATO = { codigo: 'FMT-004', version: '1', fecha: '25/03/2012' };
@@ -1533,34 +1533,55 @@ async function construirPdf(e) {
     letra(9.5, true); color(NUM); doc.text(String(n), x, y);
     color(VINO); doc.text(t.toUpperCase(), x + 4.5, y, { charSpace: 0.25 });
   }
-  // Recuadro gris con título y cuadrícula de datos {e: etiqueta, v: valor, tipo}
+  // Recuadro con borde, franja de título y cuadrícula de datos {e: etiqueta, v: valor, tipo}
+  const BORDE = [217, 204, 208], LINEAS = [230, 220, 223], FRANJA = [243, 236, 238], TITULO_ALTO = 9;
   function medirCuadricula(items, cols, ancho) {
-    const cw = (ancho - 8) / cols, filas = [];
+    const cw = ancho / cols, filas = [];
     for (let i = 0; i < items.length; i += cols) {
       let alto = 0;
       items.slice(i, i + cols).forEach(function(it) {
         letra(9, true);
-        it.lineas = it.tipo ? [val(it.v)] : doc.splitTextToSize(val(it.v), cw - 3);
-        alto = Math.max(alto, 3.4 + it.lineas.length * 3.9 + (it.tipo ? 1.2 : 0));
+        it.lineas = it.tipo ? [val(it.v)] : doc.splitTextToSize(val(it.v), cw - 7);
+        alto = Math.max(alto, 4 + it.lineas.length * 3.9 + (it.tipo ? 1.2 : 0));
       });
-      filas.push(alto + 2.6);
+      filas.push(alto + 3);
     }
     return { cw: cw, filas: filas, alto: filas.reduce(function(a, b) { return a + b; }, 0) };
+  }
+  function franjaTitulo(n, t, x, y, ancho) {
+    color(FRANJA, 'f'); doc.roundedRect(x, y, ancho, TITULO_ALTO, 2.5, 2.5, 'F');
+    doc.rect(x, y + TITULO_ALTO - 3, ancho, 3, 'F');
+    color(BORDE, 'd'); doc.setLineWidth(0.25); doc.line(x, y + TITULO_ALTO, x + ancho, y + TITULO_ALTO);
+    titulo(n, t, x + 4, y + 6.1);
   }
   function bloque(n, t, items, cols, x, y, ancho, minAlto, nota) {
     const med = medirCuadricula(items, cols, ancho);
     let lineasNota = [];
     if (nota) { letra(8.5, false); lineasNota = doc.splitTextToSize(nota, ancho - 8 - 26); }
-    const alto = Math.max(minAlto || 0, 11 + med.alto + (lineasNota.length ? lineasNota.length * 3.8 + 1.5 : 0) + 1.5);
-    color(PANEL, 'f'); doc.roundedRect(x, y, ancho, alto, 2.5, 2.5, 'F');
-    titulo(n, t, x + 4, y + 6.2);
-    let yy = y + 11;
+    const altoNota = lineasNota.length ? lineasNota.length * 3.8 + 3.5 : 0;
+    let alto = TITULO_ALTO + med.alto + altoNota;
+    if (minAlto && alto < minAlto) {   // estira las filas para igualar el alto de la foto
+      const extra = (minAlto - alto) / med.filas.length;
+      med.filas = med.filas.map(function(f) { return f + extra; }); alto = minAlto;
+    }
+    color([255, 255, 255], 'f'); doc.roundedRect(x, y, ancho, alto, 2.5, 2.5, 'F');
+    franjaTitulo(n, t, x, y, ancho);
+    // Líneas de la cuadrícula
+    color(LINEAS, 'd'); doc.setLineWidth(0.2);
+    let yy = y + TITULO_ALTO;
+    med.filas.forEach(function(f, r) {
+      const yf = yy + f;
+      if (r < med.filas.length - 1 || altoNota) doc.line(x, yf, x + ancho, yf);
+      for (let c = 1; c < cols; c++) doc.line(x + c * med.cw, yy, x + c * med.cw, yf);
+      yy = yf;
+    });
+    yy = y + TITULO_ALTO;
     items.forEach(function(it, i) {
       const col = i % cols;
       if (col === 0 && i > 0) yy += med.filas[Math.floor(i / cols) - 1];
-      const xx = x + 4 + col * med.cw;
-      letra(6.8, false); color(ETQ); doc.text(it.e.toUpperCase(), xx, yy + 1.8, { charSpace: 0.15 });
-      const yv = yy + 5.6;
+      const xx = x + col * med.cw + 4;
+      letra(6.8, false); color(ETQ); doc.text(it.e.toUpperCase(), xx, yy + 3.9, { charSpace: 0.15 });
+      const yv = yy + 8;
       if (it.tipo === 'estado') {
         const c = ESTADOS[it.v] || ESTADOS['Dado de baja'];
         letra(8, true); const tw = doc.getTextWidth(val(it.v));
@@ -1576,16 +1597,17 @@ async function construirPdf(e) {
       }
     });
     if (lineasNota.length) {
-      const yn = y + 11 + med.alto + 2;
+      const yn = y + TITULO_ALTO + med.alto + 5;
       letra(8.5, true); color(TINTA); doc.text('Recomendaciones:', x + 4, yn);
       letra(8.5, false); doc.text(lineasNota, x + 4 + 26, yn);
     }
+    color(BORDE, 'd'); doc.setLineWidth(0.3); doc.roundedRect(x, y, ancho, alto, 2.5, 2.5, 'S');
     return alto;
   }
   function bloqueEnPagina(n, t, items, cols, y, nota) {
     const ancho = W - 2 * M;
     const med = medirCuadricula(items, cols, ancho);
-    if (y + 14 + med.alto + (nota ? 10 : 0) > ABAJO) y = nueva();
+    if (y + TITULO_ALTO + med.alto + (nota ? 10 : 0) > ABAJO) y = nueva();
     return y + bloque(n, t, items, cols, M, y, ancho, 0, nota) + 4;
   }
 
@@ -1596,7 +1618,7 @@ async function construirPdf(e) {
   const ident = [{ e: 'Equipo', v: e.nombre }, { e: 'Código interno', v: e.codigo }, { e: 'Tipo', v: e.tipo },
     { e: 'Marca', v: e.marca }, { e: 'Modelo', v: e.modelo }, { e: 'Serie', v: e.serie },
     { e: 'Sede', v: e.sede }, { e: 'Ubicación', v: e.ubicacion }, { e: 'Estado', v: e.estado, tipo: 'estado' }];
-  const altoId = bloque(1, 'Identificación', ident, 3, xi, y, ai, 52);
+  const altoId = bloque(1, 'Identificación', ident, 3, xi, y, ai, 46);
   if (imgSegura(foto)) await imagenCubre(foto, M, y, fw, altoId, 2.5);
   else {
     color(PANEL, 'f'); doc.roundedRect(M, y, fw, altoId, 2.5, 2.5, 'F');
@@ -1626,35 +1648,36 @@ async function construirPdf(e) {
     return [fFechaPdf(m.fecha), m.tipo + (m.horometro !== '' && m.horometro != null ? '\n' + num(m.horometro) + ' h' : ''),
       m.descripcion + (m.repuestos ? '\nRepuestos: ' + m.repuestos : '') + (m.estadoFinal ? '\nQuedó: ' + m.estadoFinal : ''), quien, ''];
   });
-  const opcHist = function(startY, conMargen) {
+  const opcHist = function(startY) {
     return {
-      startY: startY, margin: { left: M + (conMargen ? 4 : 0), right: M + (conMargen ? 4 : 0), top: ARRIBA, bottom: 16 }, theme: 'plain',
-      styles: { font: 'helvetica', fontSize: 8.8, textColor: TINTA, cellPadding: { top: 1.8, bottom: 1.8, left: 2, right: 2 }, valign: 'top', fillColor: [255, 255, 255] },
+      startY: startY, margin: { left: M, right: M, top: ARRIBA, bottom: 16 }, theme: 'grid',
+      styles: { font: 'helvetica', fontSize: 8.8, textColor: TINTA, lineColor: LINEAS, lineWidth: 0.2, cellPadding: { top: 1.8, bottom: 1.8, left: 2.5, right: 2.5 }, valign: 'top', fillColor: [255, 255, 255] },
       head: [['FECHA', 'TIPO', 'DESCRIPCIÓN', 'REALIZÓ', 'FIRMA']],
-      headStyles: { fillColor: CABT, textColor: [102, 102, 102], fontStyle: 'bold', fontSize: 7.2 },
+      headStyles: { fillColor: [250, 246, 247], textColor: [102, 102, 102], fontStyle: 'bold', fontSize: 7.2 },
       body: filasMt.length ? filasMt : [[{ content: 'Sin intervenciones registradas', colSpan: 5, styles: { halign: 'center', textColor: SUAVE } }]],
       columnStyles: { 0: { cellWidth: 21 }, 1: { cellWidth: 22 }, 3: { cellWidth: 38 }, 4: { cellWidth: 28, minCellHeight: 13 } }
     };
   };
-  // Se mide primero en un documento aparte: si cabe en la página va dentro del recuadro gris
-  const prueba = new jsPDF({ unit: 'mm', format: 'letter' });
-  prueba.autoTable(opcHist(y + 10, true));
-  const cabe = prueba.lastAutoTable.finalY < ABAJO && prueba.getNumberOfPages() === 1;
-  if (!cabe && y + 40 > ABAJO) y = nueva();
-  const altoTabla = prueba.lastAutoTable.finalY - (y + 10);
-  if (cabe) { color(PANEL, 'f'); doc.roundedRect(M, y, W - 2 * M, altoTabla + 14, 2.5, 2.5, 'F'); }
-  titulo(5, 'Historial de intervenciones', M + 4, y + 6.2);
-  const oh = opcHist(y + 10, true);
+  if (y + TITULO_ALTO + 30 > ABAJO) y = nueva();
+  const yHist = y, paginaHist = doc.getNumberOfPages();
+  franjaTitulo(5, 'Historial de intervenciones', M, y, W - 2 * M);
+  const oh = opcHist(y + TITULO_ALTO);
   oh.didDrawCell = function(dt) {
-    if (dt.section === 'body') {
-      color(RAYA, 'd'); doc.setLineWidth(0.2); doc.line(dt.cell.x, dt.cell.y + dt.cell.height, dt.cell.x + dt.cell.width, dt.cell.y + dt.cell.height);
-    }
     if (dt.section !== 'body' || dt.column.index !== 4 || !ms[dt.row.index]) return;
     const fi = S.minis['FI:' + ms[dt.row.index].id];
     if (imgSegura(fi)) doc.addImage(fi, 'PNG', dt.cell.x + 1, dt.cell.y + 1.5, dt.cell.width - 2, Math.min(dt.cell.height - 3, (dt.cell.width - 2) / 3));
   };
   doc.autoTable(oh);
-  y = doc.lastAutoTable.finalY + (cabe ? 8 : 6);
+  // Borde exterior del recuadro (si la tabla quedó en la misma página)
+  if (doc.getNumberOfPages() === paginaHist) {
+    color(BORDE, 'd'); doc.setLineWidth(0.3);
+    doc.roundedRect(M, yHist, W - 2 * M, doc.lastAutoTable.finalY - yHist, 2.5, 2.5, 'S');
+  } else {
+    doc.setPage(paginaHist); color(BORDE, 'd'); doc.setLineWidth(0.3);
+    doc.line(M, yHist + 2.5, M, yHist + TITULO_ALTO); doc.line(W - M, yHist + 2.5, W - M, yHist + TITULO_ALTO);
+    doc.setPage(doc.getNumberOfPages());
+  }
+  y = doc.lastAutoTable.finalY + 8;
 
   // Firmas Elaboró / Revisó
   if (y + 26 > ABAJO) y = nueva();
