@@ -12,7 +12,7 @@
 
 'use strict';
 
-const VERSION_APP = '1.1.3';
+const VERSION_APP = '1.2.0';
 const PREF = 'hojas-vida:';   // prefijo propio en el almacenamiento (paso 8 de la skill)
 
 const FORMATO = { codigo: 'FMT-004', version: '1', fecha: '25/03/2012' };
@@ -1696,28 +1696,50 @@ async function construirPdf(e) {
   });
   y += 25;
 
-  // 6. Registro fotográfico (fotos de los mantenimientos; la del equipo ya va al inicio)
-  const fotos = [];
-  ms.slice().reverse().forEach(function(m) {
-    for (let i = 1; i <= 4; i++) { const f = S.minis['MT:' + m.id + ':' + i]; if (imgSegura(f)) fotos.push({ src: f, txt: fFechaPdf(m.fecha) + ' · ' + m.tipo }); }
-  });
-  if (fotos.length) {
+  // 6. Registro fotográfico: las fotos agrupadas por mantenimiento (la del equipo ya va al inicio)
+  const grupos = ms.slice().reverse().map(function(m) {
+    const fs = [];
+    for (let i = 1; i <= 4; i++) { const f = S.minis['MT:' + m.id + ':' + i]; if (imgSegura(f)) fs.push(f); }
+    const quien = m.quien === 'Proveedor' ? (m.empresa || 'Proveedor') + (m.nombreProv ? ' · ' + nombreBonito(m.nombreProv) : '') : nombresTec(m.tecnico);
+    return { m: m, fotos: fs, quien: quien };
+  }).filter(function(g) { return g.fotos.length; });
+  if (grupos.length) {
+    const anchoG = W - 2 * M, cw = (anchoG - 12) / 2, ch = 64, filaAlto = ch + 4;
     y += 10;
-    const cw = (W - 2 * M - 6) / 2, ch = 70;
-    if (y + 10 + ch + 8 > ABAJO) y = nueva();
+    if (y + 10 + TITULO_ALTO + filaAlto + 4 > ABAJO) y = nueva();
     titulo(6, 'Registro fotográfico', M + 1, y + 4);
-    color(RAYA, 'd'); doc.setLineWidth(0.3); doc.line(M, y + 6.5, W - M, y + 6.5);
-    y += 10;
-    for (let i = 0; i < fotos.length; i++) {
-      const col = i % 2;
-      if (col === 0 && i > 0) y += ch + 10;
-      if (y + ch + 8 > ABAJO) y = nueva();
-      const x = M + col * (cw + 6);
-      color(PANEL, 'f'); doc.roundedRect(x, y, cw, ch, 2.5, 2.5, 'F');
-      const t = await tamImagen(fotos[i].src);
-      const s2 = Math.min(cw / t.w, ch / t.h), iw = t.w * s2, ih = t.h * s2;
-      await imagenCubre(fotos[i].src, x + (cw - iw) / 2, y + (ch - ih) / 2, iw, ih, 2.5);
-      letra(8, false); color(SUAVE); doc.text(fotos[i].txt, x + cw / 2, y + ch + 4.5, { align: 'center' });
+    y += 9;
+    const cabeceraGrupo = function(g, sigue) {
+      color([255, 255, 255], 'f'); doc.roundedRect(M, y, anchoG, TITULO_ALTO, 2.5, 2.5, 'F');
+      color(FRANJA, 'f'); doc.roundedRect(M, y, anchoG, TITULO_ALTO, 2.5, 2.5, 'F'); doc.rect(M, y + TITULO_ALTO - 3, anchoG, 3, 'F');
+      color(BORDE, 'd'); doc.setLineWidth(0.25); doc.line(M, y + TITULO_ALTO, M + anchoG, y + TITULO_ALTO);
+      letra(9, true); color(VINO);
+      const tit = (g.m.tipo || 'Mantenimiento').toUpperCase() + ' · ' + fFechaPdf(g.m.fecha) + (sigue ? '  (continuación)' : '');
+      doc.text(tit, M + 4, y + 6.1, { charSpace: 0.2 });
+      letra(8.2, false); color(ETQ);
+      doc.text('Realizó: ' + g.quien + ' · ' + g.fotos.length + (g.fotos.length === 1 ? ' foto' : ' fotos'), M + anchoG - 4, y + 6.1, { align: 'right' });
+    };
+    for (const g of grupos) {
+      if (y + TITULO_ALTO + filaAlto + 4 > ABAJO) y = nueva();
+      let yIni = y;
+      cabeceraGrupo(g, false);
+      y += TITULO_ALTO + 4;
+      for (let i = 0; i < g.fotos.length; i += 2) {
+        if (y + filaAlto > ABAJO) {
+          color(BORDE, 'd'); doc.setLineWidth(0.3); doc.roundedRect(M, yIni, anchoG, y - yIni, 2.5, 2.5, 'S');
+          y = nueva(); yIni = y; cabeceraGrupo(g, true); y += TITULO_ALTO + 4;
+        }
+        for (let c = 0; c < 2 && i + c < g.fotos.length; c++) {
+          const x = M + 4 + c * (cw + 4);
+          color(PANEL, 'f'); doc.roundedRect(x, y, cw, ch, 2, 2, 'F');
+          const t = await tamImagen(g.fotos[i + c]);
+          const s2 = Math.min(cw / t.w, ch / t.h), iw = t.w * s2, ih = t.h * s2;
+          await imagenCubre(g.fotos[i + c], x + (cw - iw) / 2, y + (ch - ih) / 2, iw, ih, 2);
+        }
+        y += filaAlto;
+      }
+      color(BORDE, 'd'); doc.setLineWidth(0.3); doc.roundedRect(M, yIni, anchoG, y - yIni, 2.5, 2.5, 'S');
+      y += 6;
     }
   }
 
