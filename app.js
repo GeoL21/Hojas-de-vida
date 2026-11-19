@@ -12,7 +12,7 @@
 
 'use strict';
 
-const VERSION_APP = '1.3.1';
+const VERSION_APP = '1.3.2';
 const PREF = 'hojas-vida:';   // prefijo propio en el almacenamiento (paso 8 de la skill)
 
 const FORMATO = { codigo: 'FMT-004', version: '1', fecha: '25/03/2012' };
@@ -1717,13 +1717,13 @@ async function construirPdf(e) {
   }
   function titulo(n, t, x, y, blanco) {
     letra(9.5, true);
-    if (blanco) doc.setTextColor(255, 204, 212); else color(NUM);
+    if (blanco) doc.setTextColor(240, 205, 212); else color(NUM);
     doc.text(String(n), x, y);
     if (blanco) doc.setTextColor(255, 255, 255); else color(VINO);
     doc.text(t.toUpperCase(), x + 4.5, y, { charSpace: 0.25 });
   }
   // Recuadro con borde, franja de título y cuadrícula de datos {e: etiqueta, v: valor, tipo}
-  const BORDE = [196, 176, 182], LINEAS = [218, 206, 210], FRANJA = [242, 230, 233], TITULO_ALTO = 9;
+  const BORDE = [196, 176, 182], LINEAS = [218, 206, 210], FRANJA = [128, 74, 84], TITULO_ALTO = 9;
   function medirCuadricula(items, cols, ancho) {
     const cw = ancho / cols, filas = [];
     for (let i = 0; i < items.length; i += cols) {
@@ -1741,7 +1741,7 @@ async function construirPdf(e) {
     color(FRANJA, 'f'); doc.roundedRect(x, y, ancho, TITULO_ALTO, 2.5, 2.5, 'F');
     doc.rect(x, y + TITULO_ALTO - 3, ancho, 3, 'F');
     color(BORDE, 'd'); doc.setLineWidth(0.25); doc.line(x, y + TITULO_ALTO, x + ancho, y + TITULO_ALTO);
-    titulo(n, t, x + 4, y + 6.1);
+    titulo(n, t, x + 4, y + 6.1, true);
   }
   function bloque(n, t, items, cols, x, y, ancho, minAlto, nota) {
     const med = medirCuadricula(items, cols, ancho);
@@ -1930,10 +1930,10 @@ async function construirPdf(e) {
       color([255, 255, 255], 'f'); doc.roundedRect(M, y, anchoG, TITULO_ALTO, 2.5, 2.5, 'F');
       color(FRANJA, 'f'); doc.roundedRect(M, y, anchoG, TITULO_ALTO, 2.5, 2.5, 'F'); doc.rect(M, y + TITULO_ALTO - 3, anchoG, 3, 'F');
       color(BORDE, 'd'); doc.setLineWidth(0.25); doc.line(M, y + TITULO_ALTO, M + anchoG, y + TITULO_ALTO);
-      letra(9, true); color(VINO);
+      letra(9, true); doc.setTextColor(255, 255, 255);
       const tit = (g.m.tipo || 'Mantenimiento').toUpperCase() + ' · ' + fFechaPdf(g.m.fecha) + (sigue ? '  (continuación)' : '');
       doc.text(tit, M + 4, y + 6.1, { charSpace: 0.2 });
-      letra(8.2, false); color(ETQ);
+      letra(8.2, false); doc.setTextColor(240, 215, 220);
       doc.text('Realizó: ' + g.quien + ' · ' + g.fotos.length + (g.fotos.length === 1 ? ' foto' : ' fotos'), M + anchoG - 4, y + 6.1, { align: 'right' });
     };
     for (const g of grupos) {
