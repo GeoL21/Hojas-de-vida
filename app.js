@@ -12,7 +12,7 @@
 
 'use strict';
 
-const VERSION_APP = '1.3.2';
+const VERSION_APP = '1.3.3';
 const PREF = 'hojas-vida:';   // prefijo propio en el almacenamiento (paso 8 de la skill)
 
 const FORMATO = { codigo: 'FMT-004', version: '1', fecha: '25/03/2012' };
@@ -1723,7 +1723,7 @@ async function construirPdf(e) {
     doc.text(t.toUpperCase(), x + 4.5, y, { charSpace: 0.25 });
   }
   // Recuadro con borde, franja de título y cuadrícula de datos {e: etiqueta, v: valor, tipo}
-  const BORDE = [196, 176, 182], LINEAS = [218, 206, 210], FRANJA = [128, 74, 84], TITULO_ALTO = 9;
+  const BORDE = [196, 176, 182], LINEAS = [218, 206, 210], FRANJA = VINO, TITULO_ALTO = 9;
   function medirCuadricula(items, cols, ancho) {
     const cw = ancho / cols, filas = [];
     for (let i = 0; i < items.length; i += cols) {
