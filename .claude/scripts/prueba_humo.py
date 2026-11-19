@@ -108,6 +108,13 @@ with sync_playwright() as p:
     captura(pg, '06_detalle_sin_senal')
     ctx.set_offline(False); pg.evaluate("window.dispatchEvent(new Event('online'))"); pg.wait_for_timeout(1500)
     print('Tras volver la señal: cola', pg.evaluate('S.cola.length'), '| mt en servidor', len(SRV['mt']), '| campos enviados', SRV.get('ultimoMt', {}).keys())
+    # Lo último de la pantalla del equipo no debe quedar tapado por el botón fijo
+    pg.evaluate('window.scrollTo(0, document.body.scrollHeight)'); pg.wait_for_timeout(300)
+    tapa = pg.evaluate("""(() => { const b = document.querySelector('.accion-fija .btn').getBoundingClientRect();
+      const filas = [...document.querySelectorAll('.cuerpo .fila')]; const u = filas[filas.length - 1].getBoundingClientRect();
+      return u.bottom > b.top; })()""")
+    print('Botón fijo tapa lo último:', tapa); captura(pg, '06a_final_equipo')
+    if tapa: errs.append('El botón fijo tapa el final de la pantalla del equipo')
     # Mantenimiento hecho por DOS técnicos de la clínica (firma solo el primero)
     pg.click('.accion-fija [data-acc=nuevoMant]'); pg.wait_for_timeout(400)
     pg.click('[data-acc=elige][data-f=tipo][data-v=Correctivo]'); pg.fill('[data-f=descripcion]', 'Cambio de válvula de admisión.')

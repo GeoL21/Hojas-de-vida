@@ -12,7 +12,7 @@
 
 'use strict';
 
-const VERSION_APP = '1.0.3';
+const VERSION_APP = '1.0.4';
 const PREF = 'hojas-vida:';   // prefijo propio en el almacenamiento (paso 8 de la skill)
 
 const FORMATO = { codigo: 'FMT-004', version: '1', fecha: '25/03/2012' };
