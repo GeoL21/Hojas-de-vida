@@ -108,6 +108,20 @@ with sync_playwright() as p:
     captura(pg, '06_detalle_sin_senal')
     ctx.set_offline(False); pg.evaluate("window.dispatchEvent(new Event('online'))"); pg.wait_for_timeout(1500)
     print('Tras volver la señal: cola', pg.evaluate('S.cola.length'), '| mt en servidor', len(SRV['mt']), '| campos enviados', SRV.get('ultimoMt', {}).keys())
+    # Mantenimiento hecho por DOS técnicos de la clínica (firma solo el primero)
+    pg.click('.accion-fija [data-acc=nuevoMant]'); pg.wait_for_timeout(400)
+    pg.click('[data-acc=elige][data-f=tipo][data-v=Correctivo]'); pg.fill('[data-f=descripcion]', 'Cambio de válvula de admisión.')
+    pg.click('[data-acc=elige][data-f=estadoFinal][data-v=Funcionando]')
+    pg.click('[data-acc=elige][data-f=quien][data-v="Técnico de la clínica"]'); pg.wait_for_timeout(200)
+    pg.click('[data-acc=eligeVarias][data-f=tecnico][data-v="Kensy Díaz"]'); pg.wait_for_timeout(200)
+    print('Técnicos marcados:', pg.locator('[data-campo=tecnico] [aria-pressed=true]').all_inner_texts())
+    firmar('[data-firma=firma]')
+    print('Rótulo de la firma:', pg.evaluate("document.querySelector('[data-firma=firma]').innerText.trim()"))
+    pg.evaluate("document.querySelector('#c-tecnico').scrollIntoView({block:'center'})"); captura(pg, '06b_dos_tecnicos')
+    pg.click('[data-acc=guardarMant]'); pg.wait_for_timeout(1500)
+    dos = SRV['mt'][-1].get('tecnico') if len(SRV['mt']) > 1 else None
+    print('Técnicos enviados:', dos)
+    if dos != 'JORGE ORTIZ, KENSY DÍAZ': errs.append('No se guardaron los dos técnicos: %r' % dos)
     # PDF
     with pg.expect_download() as dl:
         pg.click('.cab [data-acc=pdf]'); pg.wait_for_selector('.hoja', timeout=15000)
@@ -123,7 +137,7 @@ with sync_playwright() as p:
     pg.click('[data-acc=vista][data-v=ajustes]'); pg.wait_for_timeout(400); captura(pg, '10_ajustes')
     pg.click('[data-acc=vista][data-v=equipos]'); pg.wait_for_timeout(400)
     # Anchos
-    for w, h in [(320, 700), (768, 1024), (1024, 768), (1440, 900)]:
+    for w, h in [(320, 700), (390, 844), (768, 1024), (1024, 768), (1440, 900)]:
         pg.set_viewport_size({'width': w, 'height': h}); pg.wait_for_timeout(400)
         ancho = pg.evaluate('document.documentElement.scrollWidth')
         print('Ancho %d: desborde horizontal = %s' % (w, ancho > w))

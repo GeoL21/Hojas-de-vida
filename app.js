@@ -12,7 +12,7 @@
 
 'use strict';
 
-const VERSION_APP = '1.0.0';
+const VERSION_APP = '1.0.1';
 const PREF = 'hojas-vida:';   // prefijo propio en el almacenamiento (paso 8 de la skill)
 
 const FORMATO = { codigo: 'FMT-004', version: '1', fecha: '25/03/2012' };
@@ -100,6 +100,9 @@ function sumarMeses(iso, meses) {
 function plural(n, uno, varios) { return n + ' ' + (n === 1 ? uno : varios); }
 function num(n) { return new Intl.NumberFormat('es-CO', { maximumFractionDigits: 1 }).format(Number(n) || 0); }
 function nombreBonito(t) { return String(t || '').toLowerCase().replace(/(^|\s)\S/g, function(m) { return m.toUpperCase(); }); }
+/** Técnicos de un mantenimiento: se guardan como "Jorge Ortiz, Kensy Díaz" (el primero es quien firma). */
+function listaTec(t) { return String(t || '').split(',').map(function(x) { return x.trim(); }).filter(Boolean); }
+function nombresTec(t) { return listaTec(t).map(nombreBonito).join(' y '); }
 function imgSegura(src) { return /^data:image\/(png|jpe?g|webp);base64,/.test(String(src || '')); }
 
 let relojToast = null;
@@ -583,7 +586,7 @@ function bloquesEquipo(e, compacto) {
 }
 
 function filaMant(m, conEquipo) {
-  const quien = m.quien === 'Proveedor' ? (m.empresa || 'Proveedor') + (m.nombreProv ? ' · ' + nombreBonito(m.nombreProv) : '') : nombreBonito(m.tecnico);
+  const quien = m.quien === 'Proveedor' ? (m.empresa || 'Proveedor') + (m.nombreProv ? ' · ' + nombreBonito(m.nombreProv) : '') : nombresTec(m.tecnico);
   const icono = m.tipo === 'Preventivo' ? 'event_available' : m.tipo === 'Correctivo' ? 'handyman' : m.tipo === 'Inspección' ? 'search' : 'build';
   return '<div class="fila"><span class="mini">' + ico(icono) + '</span><span class="txt"><span class="t">' +
     esc((conEquipo ? m.equipo || m.codigo : m.tipo) + (conEquipo ? ' · ' + m.tipo : '')) + '</span><span class="st">' +
@@ -686,6 +689,14 @@ function abrirFormEquipo(id) {
 }
 
 /** Fichas para elegir una opción (con ✓ en la elegida). */
+/** Fichas donde se pueden marcar varias (técnicos de un mantenimiento). */
+function fichasVarias(campo, opciones, valores) {
+  return '<div class="fichas" role="group" data-campo="' + campo + '">' + opciones.map(function(o) {
+    const act = valores.indexOf(o) >= 0;
+    return '<button type="button" class="ficha" data-acc="eligeVarias" data-f="' + campo + '" data-v="' + esc(o) + '" aria-pressed="' + act + '">' + (act ? ico('check', 's') : '') + esc(o) + '</button>';
+  }).join('') + '</div>';
+}
+
 function fichas(campo, opciones, valor, extra) {
   return '<div class="fichas" role="group" data-campo="' + campo + '">' + opciones.map(function(o) {
     const act = valor === o;
@@ -884,8 +895,8 @@ function htmlFormMant() {
   h += '<div><h2 class="secc">Realizado por ' + listo(okQ) + '</h2><div class="tarjeta">' +
     '<div class="campo" id="c-quien">' + fichas('quien', ['Técnico de la clínica', 'Proveedor'], d.quien) + '</div>';
   if (d.quien === 'Técnico de la clínica') {
-    h += '<div class="campo" id="c-tecnico"><span class="etq">Técnico</span>' + fichas('tecnico', tecs.map(nombreBonito), nombreBonito(d.tecnico)) + '</div>' +
-      '<div class="campo" id="c-firma"><span class="etq">Firma del técnico</span>' + htmlFirma('firma', 'Firma de ' + nombreBonito(d.tecnico)) + '</div>';
+    h += '<div class="campo" id="c-tecnico"><span class="etq">Técnico <em>puedes elegir 1 o 2</em></span>' + fichasVarias('tecnico', tecs.map(nombreBonito), listaTec(d.tecnico).map(nombreBonito)) + '</div>' +
+      '<div class="campo" id="c-firma"><span class="etq">Firma del técnico</span>' + htmlFirma('firma', 'Firma de ' + nombreBonito(listaTec(d.tecnico)[0] || '')) + '</div>';
   } else if (d.quien === 'Proveedor') {
     h += '<div class="campo" id="c-empresa"><span class="etq">Empresa</span>' + selector('empresa', S.cfg.empresas, d.empresa, 'Agregar empresa') + '</div>' +
       campoTexto('nombreProv', 'Nombre de quien lo hizo', d.nombreProv, { ph: 'Carlos Pérez' }) +
@@ -1196,6 +1207,19 @@ function accion(a, b) {
       F.sucio = true;
       pintarForm();
       break;
+    case 'eligeVarias': {
+      if (!F) break;
+      const real = tecnicosDe(F.d.sede).filter(function(t) { return nombreBonito(t) === b.dataset.v; })[0] || b.dataset.v;
+      let l = listaTec(F.d.tecnico);
+      const antes = l[0] || '';
+      if (l.indexOf(real) >= 0) l = l.filter(function(x) { return x !== real; });
+      else { l.push(real); if (l.length > 2) l = [l[0], real]; }
+      F.d.tecnico = l.join(', ');
+      if (F.firmas && (l[0] || '') !== antes) delete F.firmas.firma;
+      F.sucio = true;
+      pintarForm();
+      break;
+    }
     case 'noaplica': F.d[b.dataset.f] = F.d[b.dataset.f] === 'No aplica' ? '' : 'No aplica'; F.sucio = true; pintarForm(); break;
     case 'agregar': {
       const inp = $('[data-nuevo="' + b.dataset.f + '"]');
@@ -1541,7 +1565,7 @@ async function construirPdf(e) {
   const filasMt = ms.map(function(m) {
     const quien = m.quien === 'Proveedor'
       ? (m.empresa || 'Proveedor') + '\n' + nombreBonito(m.nombreProv) + (m.orden ? '\nOrden: ' + m.orden : '') + (m.recibe ? '\nRecibió: ' + nombreBonito(m.recibe) : '')
-      : nombreBonito(m.tecnico) + '\n(Clínica)';
+      : nombresTec(m.tecnico) + '\n(Clínica)';
     return [fFechaPdf(m.fecha), m.tipo + (m.horometro !== '' && m.horometro != null ? '\n' + num(m.horometro) + ' h' : ''),
       m.descripcion + (m.repuestos ? '\nRepuestos: ' + m.repuestos : '') + (m.estadoFinal ? '\nQuedó: ' + m.estadoFinal : ''), quien, ''];
   });
