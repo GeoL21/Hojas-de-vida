@@ -12,7 +12,7 @@
 
 'use strict';
 
-const VERSION_APP = '1.0.1';
+const VERSION_APP = '1.0.2';
 const PREF = 'hojas-vida:';   // prefijo propio en el almacenamiento (paso 8 de la skill)
 
 const FORMATO = { codigo: 'FMT-004', version: '1', fecha: '25/03/2012' };
@@ -755,7 +755,7 @@ function htmlFormEquipo() {
   h += '<div class="ancho"><h2 class="secc">Foto del equipo ' + listo(!!fotoSrc) + '</h2>' +
     (fotoSrc ? '<div class="foto-prev" id="c-foto"><img src="' + fotoSrc + '" alt="Foto del equipo"><div class="acc"><button type="button" data-acc="foto">' + ico('photo_camera', 's') + 'Cambiar</button></div></div>'
       : '<button type="button" class="foto-btn" id="c-foto" data-acc="foto">' + ico('add_a_photo', 'l') + 'Tomar foto del equipo<span class="ayuda">La hoja de vida empieza con esta foto</span></button>') +
-    '<input type="file" id="archFoto" accept="image/*" capture="environment" class="oculto"></div>';
+    '<input type="file" id="archFoto" accept="image/*" class="oculto"></div>';
   // Identificación
   const okId = d.tipo && String(d.nombre).trim() && d.sede && d.estado;
   h += '<div><h2 class="secc">Identificación ' + listo(!!okId) + '</h2><div class="tarjeta">' +
@@ -914,7 +914,7 @@ function htmlFormMant() {
   h += '<div class="ancho"><h2 class="secc">Fotos <small>opcional · hasta 4</small></h2><div class="fotos-mt">' +
     F.fotos.map(function(f, i) { return '<span class="f"><img src="' + f.url + '" alt="Foto ' + (i + 1) + '"><button type="button" class="x" data-acc="quitarFoto" data-i="' + i + '" aria-label="Quitar foto">' + ico('close', 's') + '</button></span>'; }).join('') +
     (F.fotos.length < 4 ? '<button type="button" class="f" data-acc="fotoMt" aria-label="Agregar foto">' + ico('add_a_photo') + '</button>' : '') +
-    '</div><input type="file" id="archFotoMt" accept="image/*" capture="environment" class="oculto"></div>';
+    '</div><input type="file" id="archFotoMt" accept="image/*" multiple class="oculto"></div>';
   h += '</div>';
   h += '<div class="accion-fija"><button type="button" class="btn" data-acc="guardarMant">' + ico('check') + 'Guardar mantenimiento</button></div>';
   return h;
@@ -1139,12 +1139,15 @@ function enlazar() {
         pintarForm();
       } catch (e) { toast(ico('warning', 's') + esc(e.message)); }
     }
-    if (t.id === 'archFotoMt' && t.files[0]) {
+    if (t.id === 'archFotoMt' && t.files.length) {
+      // Cámara o galería; de la galería se pueden elegir varias (máximo 4 en total)
+      const lista = Array.prototype.slice.call(t.files, 0, Math.max(0, 4 - S.form.fotos.length));
       try {
-        const f = await procesarFoto(t.files[0], 360, 0.6);
-        S.form.fotos.push(f); S.form.sucio = true;
+        for (const a of lista) S.form.fotos.push(await procesarFoto(a, 360, 0.6));
+        S.form.sucio = true;
+        if (t.files.length > lista.length) toast(ico('info', 's') + 'Solo caben 4 fotos; se agregaron ' + lista.length + '.');
         pintarForm();
-      } catch (e) { toast(ico('warning', 's') + esc(e.message)); }
+      } catch (e) { toast(ico('warning', 's') + esc(e.message)); pintarForm(); }
     }
     if (t.id === 'archInforme' && t.files[0]) {
       const a = t.files[0];
