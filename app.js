@@ -12,7 +12,7 @@
 
 'use strict';
 
-const VERSION_APP = '1.3.0';
+const VERSION_APP = '1.3.1';
 const PREF = 'hojas-vida:';   // prefijo propio en el almacenamiento (paso 8 de la skill)
 
 const FORMATO = { codigo: 'FMT-004', version: '1', fecha: '25/03/2012' };
@@ -1729,9 +1729,9 @@ async function construirPdf(e) {
     for (let i = 0; i < items.length; i += cols) {
       let alto = 0;
       items.slice(i, i + cols).forEach(function(it) {
-        letra(9, true);
+        letra(10, true);
         it.lineas = it.tipo ? [val(it.v)] : doc.splitTextToSize(val(it.v), cw - 7);
-        alto = Math.max(alto, 4 + it.lineas.length * 3.9 + (it.tipo ? 1.2 : 0));
+        alto = Math.max(alto, 4 + it.lineas.length * 4.2 + (it.tipo ? 1.2 : 0));
       });
       filas.push(alto + 3);
     }
@@ -1770,7 +1770,7 @@ async function construirPdf(e) {
       const col = i % cols;
       if (col === 0 && i > 0) yy += med.filas[Math.floor(i / cols) - 1];
       const xx = x + col * med.cw + 4;
-      letra(7.2, true); color(ETQ); doc.text(it.e.toUpperCase(), xx, yy + 3.9, { charSpace: 0.12 });
+      letra(7, true); color(VINO); doc.text(it.e.toUpperCase(), xx, yy + 3.9, { charSpace: 0.12 });
       const yv = yy + 8;
       if (it.tipo === 'estado') {
         const c = ESTADOS[it.v] || ESTADOS['Dado de baja'];
@@ -1783,7 +1783,7 @@ async function construirPdf(e) {
         doc.roundedRect(xx, yv - 3.5, tw + 5, 5.2, 1.3, 1.3, 'FD');
         color(VINO); doc.text(val(it.v), xx + 2.5, yv);
       } else {
-        letra(9, true); color(TINTA); doc.text(it.lineas, xx, yv);
+        letra(10, true); doc.setTextColor(0, 0, 0); doc.text(it.lineas, xx, yv);
       }
     });
     if (lineasNota.length) {
