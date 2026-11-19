@@ -5,4 +5,4 @@
  * de la hoja "Hojas de vida - Gases medicinales" (la que termina en /exec).
  *****************************************************************/
 
-const URL_APPS_SCRIPT = 'PEGA_AQUI_LA_URL_DE_APPS_SCRIPT/exec';
+const URL_APPS_SCRIPT = 'https://script.google.com/macros/s/AKfycbwyaDrWlMB7JR99xIrPsGtrJI1leczuxnXoA5uyJvLgqdYUlvQCJ-Y6XzlEcdP5ZBCn/exec';
