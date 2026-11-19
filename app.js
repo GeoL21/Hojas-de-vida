@@ -12,7 +12,7 @@
 
 'use strict';
 
-const VERSION_APP = '1.1.2';
+const VERSION_APP = '1.1.3';
 const PREF = 'hojas-vida:';   // prefijo propio en el almacenamiento (paso 8 de la skill)
 
 const FORMATO = { codigo: 'FMT-004', version: '1', fecha: '25/03/2012' };
@@ -1560,7 +1560,8 @@ async function construirPdf(e) {
   function bloque(n, t, items, cols, x, y, ancho, minAlto, nota) {
     const med = medirCuadricula(items, cols, ancho);
     let lineasNota = [];
-    if (nota) { letra(8.5, false); lineasNota = doc.splitTextToSize(nota, ancho - 8 - 26); }
+    letra(8.5, true); const anchoEtq = doc.getTextWidth('Recomendaciones:') + 2;
+    if (nota) { letra(8.5, false); lineasNota = doc.splitTextToSize(nota, ancho - 8 - anchoEtq); }
     const altoNota = lineasNota.length ? lineasNota.length * 3.8 + 3.5 : 0;
     let alto = TITULO_ALTO + med.alto + altoNota;
     if (minAlto && alto < minAlto) {   // estira las filas para igualar el alto de la foto
@@ -1602,7 +1603,7 @@ async function construirPdf(e) {
     if (lineasNota.length) {
       const yn = y + TITULO_ALTO + med.alto + 5;
       letra(8.5, true); color(TINTA); doc.text('Recomendaciones:', x + 4, yn);
-      letra(8.5, false); doc.text(lineasNota, x + 4 + 26, yn);
+      letra(8.5, false); doc.text(lineasNota, x + 4 + anchoEtq, yn);
     }
     color(BORDE, 'd'); doc.setLineWidth(0.3); doc.roundedRect(x, y, ancho, alto, 2.5, 2.5, 'S');
     return alto;
@@ -1688,7 +1689,7 @@ async function construirPdf(e) {
   [['Elaboró', nombreBonito(S.tecnico), 'Técnico de gases medicinales'], ['Revisó', S.cfg.coordinador || '', 'Coordinador de gases medicinales']].forEach(function(f, i) {
     const x = M + i * (anchoF + 10);
     color([227, 215, 218], 'd'); doc.setLineWidth(0.3); doc.roundedRect(x, y, anchoF, 25, 2.5, 2.5, 'S');
-    letra(7.5, true); color(VINO); doc.text(f[0].toUpperCase(), x + 4, y + 5.5, { charSpace: 0.2 });
+    letra(7.5, true); color(ETQ); doc.text(f[0].toUpperCase(), x + 4, y + 5.5, { charSpace: 0.2 });
     color([85, 85, 85], 'd'); doc.setLineWidth(0.25); doc.line(x + 8, y + 15, x + anchoF - 8, y + 15);
     letra(9, true); color(TINTA); doc.text(f[1], x + anchoF / 2, y + 19, { align: 'center' });
     if (f[1] !== f[2]) { letra(8, false); color(SUAVE); doc.text(f[2], x + anchoF / 2, y + 22.6, { align: 'center' }); }

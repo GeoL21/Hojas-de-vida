@@ -78,6 +78,7 @@ with sync_playwright() as p:
     pg.click('[data-acc=elige][data-f=periodicidad][data-v=Trimestral]'); pg.click('[data-acc=elige][data-f=responsable][data-v=Proveedor]'); pg.wait_for_timeout(200)
     pg.click('[data-acc=agregar][data-f=empresaMtto]'); pg.fill('[data-nuevo=empresaMtto]', 'servicompresores sas'); pg.press('[data-nuevo=empresaMtto]', 'Enter'); pg.wait_for_timeout(200)
     pg.click('[data-acc=elige][data-f=manual][data-v=Sí]')
+    pg.fill('[data-f=recomendaciones]', 'Cada 2000h o 3000h necesita cambio de: aceite lubricante, filtro de aceite, filtro de aire, cartucho separador de aceite y revisión general de correas y mangueras')
     print('Código propuesto:', pg.input_value('[data-f=codigo]'), '| empresa:', pg.inner_text('[data-campo=empresaMtto] [aria-pressed=true]'))
     pg.evaluate('window.scrollTo(0,0)'); captura(pg, '03_form_equipo')
     pg.click('[data-acc=guardarEquipo]'); pg.wait_for_timeout(1200)
