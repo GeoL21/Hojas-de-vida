@@ -12,7 +12,7 @@
 
 'use strict';
 
-const VERSION_APP = '1.0.2';
+const VERSION_APP = '1.0.3';
 const PREF = 'hojas-vida:';   // prefijo propio en el almacenamiento (paso 8 de la skill)
 
 const FORMATO = { codigo: 'FMT-004', version: '1', fecha: '25/03/2012' };
@@ -1602,12 +1602,12 @@ async function construirPdf(e) {
     if (f[1] !== f[2]) { doc.setTextColor(SUAVE[0], SUAVE[1], SUAVE[2]); doc.text(f[2], x + anchoF / 2, y + 21.2, { align: 'center' }); }
   });
 
-  // Registro fotográfico (página aparte)
+  // Registro fotográfico (fotos de los mantenimientos)
   const fotos = [];
   ms.slice().reverse().forEach(function(m) {
     for (let i = 1; i <= 4; i++) { const f = S.minis['MT:' + m.id + ':' + i]; if (imgSegura(f)) fotos.push({ src: f, txt: fFechaPdf(m.fecha) + ' · ' + m.tipo }); }
   });
-  if (imgSegura(foto) || fotos.length) {
+  if (fotos.length) {
     // Sigue en la misma página si cabe al menos una fila de fotos
     y += 30;
     if (y + 92 > H - 12) { doc.addPage(); y = ARRIBA; }
@@ -1615,7 +1615,8 @@ async function construirPdf(e) {
     doc.setTextColor(255); doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5);
     doc.text('6. Registro fotográfico', M + 2, y + 4.8);
     y += 10;
-    const lista = (imgSegura(foto) ? [{ src: foto, txt: 'Foto del equipo' }] : []).concat(fotos);
+    // Solo evidencias de mantenimientos: la foto del equipo ya va al inicio de la hoja
+    const lista = fotos;
     const cw = (W - 2 * M - 6) / 2, ch = 70;
     for (let i = 0; i < lista.length; i++) {
       const col = i % 2;
