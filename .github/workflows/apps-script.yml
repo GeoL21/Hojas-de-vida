@@ -1,0 +1,36 @@
+# Sube el Apps Script a Google cuando cambia apps-script/ en main.
+# Solo funciona si existen los secretos CLASPRC_JSON y DEPLOYMENT_ID
+# (Settings → Secrets and variables → Actions). Si no existen, no hace nada.
+name: Subir Apps Script
+on:
+  push:
+    branches: [main]
+    paths: ['apps-script/**']
+  workflow_dispatch:
+jobs:
+  subir:
+    runs-on: ubuntu-latest
+    env:
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+      DEPLOYMENT_ID: ${{ secrets.DEPLOYMENT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: ¿Hay secretos?
+        id: hay
+        run: |
+          if [ -z "$CLASPRC_JSON" ] || [ -z "$DEPLOYMENT_ID" ]; then
+            echo "Faltan los secretos CLASPRC_JSON / DEPLOYMENT_ID: no se sube nada."; echo "ok=no" >> $GITHUB_OUTPUT
+          else echo "ok=si" >> $GITHUB_OUTPUT; fi
+      - if: steps.hay.outputs.ok == 'si'
+        uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - if: steps.hay.outputs.ok == 'si'
+        name: Subir y actualizar la implementación (misma URL)
+        working-directory: apps-script
+        run: |
+          npm i -g @google/clasp@2
+          printf '%s' "$CLASPRC_JSON" > ~/.clasprc.json
+          grep -q PEGAR_AQUI .clasp.json && { echo "Falta el scriptId en apps-script/.clasp.json"; exit 1; }
+          clasp push -f
+          clasp deploy -i "$DEPLOYMENT_ID" -d "GitHub $(date +%F) ${GITHUB_SHA::7}"
+          rm -f ~/.clasprc.json

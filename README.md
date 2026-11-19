@@ -45,3 +45,34 @@ En GitHub abre `config.js`, toca el lápiz, reemplaza `PEGA_AQUI_LA_URL_DE_APPS_
 ## Si cambias archivos de la app
 
 Sube `VERSION` en `sw.js` (`hojas-vida-v1` → `hojas-vida-v2`). Al abrir la app sale **Hay una versión nueva · Actualizar**.
+
+## Subir el Apps Script con clasp (sin copiar y pegar)
+
+clasp es la herramienta de Google para subir el `Code.gs` desde el PC. Se hace **siempre con la cuenta cilindrocrc@gmail.com**.
+
+Una sola vez, en el PC con Windows:
+
+1. Instala Node.js (versión LTS) desde nodejs.org.
+2. Abre «Símbolo del sistema» y escribe: `npm i -g @google/clasp@2`
+3. Entra con cilindrocrc a https://script.google.com/home/usersettings y activa **API de Google Apps Script**.
+4. Escribe `clasp login`, se abre el navegador: elige **cilindrocrc@gmail.com** y acepta.
+5. En el editor del Apps Script → ⚙ **Configuración del proyecto** → copia el **ID de la secuencia de comandos** y pégalo en `apps-script/.clasp.json` (en vez de `PEGAR_AQUI_EL_ID_DEL_SCRIPT`).
+6. En **Implementar → Gestionar implementaciones** copia el **ID de implementación** (empieza por `AKfycb…`, es el mismo de la URL).
+
+Cada vez que cambie el `Code.gs`, dentro de la carpeta `apps-script`:
+
+```
+clasp push
+clasp deploy -i ID_DE_IMPLEMENTACION -d "cambio"
+```
+
+`deploy -i` actualiza la implementación que ya existe, así **la URL no cambia** y la app sigue funcionando.
+
+### Opcional: que GitHub lo suba solo
+
+El archivo `.github/workflows/apps-script.yml` sube el script cada vez que cambia `apps-script/` en `main`. Necesita dos secretos en GitHub (Settings → Secrets and variables → Actions):
+
+- `CLASPRC_JSON`: el contenido del archivo `C:\Users\<tu usuario>\.clasprc.json` que crea `clasp login`.
+- `DEPLOYMENT_ID`: el ID de implementación.
+
+⚠️ El `.clasprc.json` es la llave de la cuenta cilindrocrc: **solo va en el secreto**, nunca en el repositorio ni en un chat.

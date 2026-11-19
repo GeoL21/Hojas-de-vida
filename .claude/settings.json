@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in *.js) node --check \"$f\" >/dev/null 2>/tmp/err.txt || { echo \"Error de sintaxis en $f:\" >&2; head -5 /tmp/err.txt >&2; exit 2; } ;; *.gs) cp \"$f\" /tmp/revisar_gs.js && node --check /tmp/revisar_gs.js >/dev/null 2>/tmp/err.txt || { echo \"Error de sintaxis en $f:\" >&2; head -5 /tmp/err.txt >&2; exit 2; } ;; *.json) jq empty \"$f\" 2>/tmp/err.txt || { echo \"JSON mal formado en $f:\" >&2; cat /tmp/err.txt >&2; exit 2; } ;; esac; exit 0"
+          }
+        ]
+      }
+    ]
+  }
+}
