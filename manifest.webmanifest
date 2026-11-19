@@ -1,0 +1,16 @@
+{
+  "name": "Hojas de vida · Gases medicinales",
+  "short_name": "Hojas de vida",
+  "description": "Hojas de vida de los equipos de gases medicinales de Clínica Reina Catalina: compresores, bombas de vacío, SAM y generadores de oxígeno.",
+  "lang": "es-CO",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#FFFBFA",
+  "theme_color": "#FFFBFA",
+  "icons": [
+    { "src": "icon-192.png?v=20261119", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png?v=20261119", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png?v=20261119", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
