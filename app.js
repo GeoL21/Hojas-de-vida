@@ -12,7 +12,7 @@
 
 'use strict';
 
-const VERSION_APP = '1.2.0';
+const VERSION_APP = '1.3.0';
 const PREF = 'hojas-vida:';   // prefijo propio en el almacenamiento (paso 8 de la skill)
 
 const FORMATO = { codigo: 'FMT-004', version: '1', fecha: '25/03/2012' };
@@ -343,6 +343,55 @@ function proponerCodigo(tipo, idActual) {
   for (let n = 1; n < 1000; n++) { const c = pre + dos(n); if (!usados[c]) return c; }
   return pre + azar(3);
 }
+/* ---------- Componentes y lecturas ----------
+ * Componentes del equipo: una línea por componente, con los datos separados por " | ":
+ *   código | nombre | marca | modelo | serie | lleva horas (sí/no) | estado | nota
+ * Así se leen bien en la hoja de cálculo y la app los vuelve a armar. */
+const LECTURAS_BASE = ['Presión (psig)', 'Punto de rocío (°C)', 'CO (ppm)', 'Pureza de O₂ (%)', 'Temperatura (°C)'];
+function limpiaComp(t) { return String(t == null ? '' : t).replace(/[|\n\r]+/g, ' ').trim(); }
+function leerComps(texto) {
+  return String(texto || '').split(/\n+/).map(function(l) { return l.trim(); }).filter(Boolean).map(function(l) {
+    const p = l.split('|').map(function(x) { return x.trim(); });
+    return { codigo: p[0] || '', nombre: p[1] || '', marca: p[2] || '', modelo: p[3] || '', serie: p[4] || '',
+      horas: /^s[ií]/i.test(p[5] || ''), estado: p[6] || 'Funcionando', nota: p[7] || '' };
+  }).filter(function(c) { return c.nombre; });
+}
+function escribirComps(lista) {
+  return lista.filter(function(c) { return limpiaComp(c.nombre); }).map(function(c) {
+    return [c.codigo, c.nombre, c.marca, c.modelo, c.serie, c.horas ? 'sí' : 'no', c.estado || 'Funcionando', c.nota].map(limpiaComp).join(' | ');
+  }).join('\n');
+}
+function listaLecturas(t) { return String(t || '').split(';').map(function(x) { return x.trim(); }).filter(Boolean); }
+/** Código corto propuesto para un componente: SAM-C1, SAM-S2… (la letra sale del nombre). */
+function proponerCodComp(codigoEq, nombre, lista) {
+  const partes = String(codigoEq || '').split('-');
+  const pre = partes.length >= 3 ? partes[1] : (partes[0] || 'EQ');
+  const n = normal(nombre);
+  const letra = /^electrovalvula/.test(n) ? 'EV' : /^tablero/.test(n) ? 'TE' : /^pantalla/.test(n) ? 'P' : (n.charAt(0) || 'X').toUpperCase();
+  const usados = {};
+  lista.forEach(function(c) { usados[c.codigo] = true; });
+  for (let i = 1; i < 100; i++) { const c = pre + '-' + letra + i; if (!usados[c]) return c; }
+  return pre + '-' + letra + azar(2);
+}
+/** Lecturas de un mantenimiento: "Horas SAM-C1: 2048 · Presión (psig): 79". */
+function leerLecturas(t) {
+  const o = {};
+  String(t || '').split(' · ').forEach(function(par) {
+    const i = par.lastIndexOf(':');
+    if (i > 0) o[par.slice(0, i).trim()] = par.slice(i + 1).trim();
+  });
+  return o;
+}
+/** Horas más recientes de un componente según las lecturas de los mantenimientos. */
+function horasComp(e, codigo) {
+  const ms = mantsDe(e);
+  for (let i = 0; i < ms.length; i++) {
+    const v = leerLecturas(ms[i].lecturas)['Horas ' + codigo];
+    if (v !== undefined && v !== '') return v;
+  }
+  return '';
+}
+
 function tecnicosDe(sede) { return (S.cfg.tecnicos && S.cfg.tecnicos[sede]) || []; }
 
 
@@ -574,6 +623,9 @@ function bloquesEquipo(e, compacto) {
   h += '<h2 class="secc">Datos técnicos</h2>' + grupoPares([
     ['Potencia', e.potencia], ['Voltaje · fases', [e.voltaje, e.fases].filter(Boolean).join(' · ')], ['Corriente', e.corriente],
     ['Caudal', e.caudal], ['Presión de trabajo', e.presion], ['Lubricación', e.lubricacion], ['Otros', e.otros]]);
+  const comps = leerComps(e.componentes);
+  if (comps.length) h += '<h2 class="secc">Componentes <small>' + comps.length + '</small></h2><div class="grupo">' +
+    comps.map(function(c, i) { return filaComp(c, i, e, false); }).join('') + '</div>';
   h += '<h2 class="secc">Plan de mantenimiento</h2>' + grupoPares([
     ['Periodicidad', e.periodicidad === 'Por horas de uso' ? 'Cada ' + num(e.cadaHoras) + ' h de uso' : e.periodicidad],
     ['Responsable', e.responsable === 'Proveedor' ? 'Proveedor · ' + (e.empresaMtto || '') : e.responsable],
@@ -590,7 +642,7 @@ function filaMant(m, conEquipo) {
   const icono = m.tipo === 'Preventivo' ? 'event_available' : m.tipo === 'Correctivo' ? 'handyman' : m.tipo === 'Inspección' ? 'search' : 'build';
   return '<div class="fila"><span class="mini">' + ico(icono) + '</span><span class="txt"><span class="t">' +
     esc((conEquipo ? m.equipo || m.codigo : m.tipo) + (conEquipo ? ' · ' + m.tipo : '')) + '</span><span class="st">' +
-    esc(fFecha(m.fecha) + ' · ' + quien + (m.horometro !== '' && m.horometro != null ? ' · ' + num(m.horometro) + ' h' : '') + ' · ' + m.descripcion) +
+    esc(fFecha(m.fecha) + ' · ' + quien + (m.horometro !== '' && m.horometro != null ? ' · ' + num(m.horometro) + ' h' : '') + (m.componentes ? ' · ' + m.componentes : '') + ' · ' + m.descripcion) +
     (m.pendiente ? ' · <span class="pend">' + ico('cloud_off', 's') + 'por subir</span>' : '') + '</span></span>' +
     (m.estadoFinal && m.estadoFinal !== 'Funcionando' ? '<span class="dato">' + esc(m.estadoFinal) + '</span>' : '') + '</div>';
 }
@@ -681,10 +733,11 @@ function abrirFormEquipo(id) {
     id: nuevoId('EQ'), codigo: '', nombre: '', tipo: '', sede: S.sede, ubicacion: '', marca: '', modelo: '', serie: '',
     estado: 'Funcionando', proveedor: '', instalacion: '', forma: '', garantia: '', invima: '', riesgo: '',
     potencia: '', voltaje: '', fases: '', corriente: '', caudal: '', presion: '', lubricacion: '', otros: '',
-    periodicidad: '', cadaHoras: '', responsable: '', empresaMtto: '', manual: '', recomendaciones: ''
+    periodicidad: '', cadaHoras: '', responsable: '', empresaMtto: '', manual: '', recomendaciones: '', componentes: '', lecturas: ''
   };
   delete base.pendiente;
-  S.form = { tipo: 'equipo', nuevo: !e, d: base, foto: null, codigoTocado: !!e, sucio: false };
+  S.form = { tipo: 'equipo', nuevo: !e, d: base, foto: null, codigoTocado: !!e, sucio: false,
+    comps: leerComps(base.componentes), compAbierto: -1 };
   abrir({ tipo: 'formEquipo' });
 }
 
@@ -745,6 +798,43 @@ function faltaEquipo(d, foto) {
   return f;
 }
 
+/** Fila de un componente (en el detalle del equipo y en el formulario). */
+function filaComp(c, i, e, editable) {
+  const horas = c.horas ? horasComp(e, c.codigo) : '';
+  const sub = [[c.marca, c.modelo].filter(Boolean).join(' '), c.serie ? 'Serie ' + c.serie : '', c.horas ? (horas !== '' ? num(horas) + ' h' : 'lleva horas') : '', c.nota].filter(Boolean).join(' · ');
+  const tag = editable ? 'button type="button" data-acc="compAbrir" data-i="' + i + '"' : 'div';
+  return '<' + tag + ' class="fila"><span class="mini" style="font-weight:760;font-size:12px">' + esc((c.codigo || '').split('-').pop() || '·') + '</span>' +
+    '<span class="txt"><span class="t">' + esc(c.nombre) + '</span>' + (sub ? '<span class="st">' + esc(sub) + '</span>' : '') +
+    (c.estado && c.estado !== 'Funcionando' ? chipEstado(c.estado) : '') + '</span>' + (editable ? ico('edit', 's') : '') + '</' + (editable ? 'button' : 'div') + '>';
+}
+function editorComp(c, i) {
+  const ent = function(campo, etq, ph) {
+    return '<div class="campo" style="margin-top:10px"><label class="etq">' + esc(etq) + '</label><input class="entrada" data-c="' + campo + '" data-i="' + i + '" value="' + esc(c[campo] || '') + '" placeholder="' + esc(ph || '') + '" autocomplete="off"></div>';
+  };
+  return '<div class="fila" style="flex-direction:column;align-items:stretch;padding:14px 16px" id="c-comp-' + i + '">' +
+    '<div style="display:flex;align-items:center;gap:8px"><b style="flex:1;font-size:17px;font-weight:660">' + esc(c.nombre || 'Componente nuevo') + '</b>' +
+    '<button type="button" class="pastilla" data-acc="compListo">' + ico('check', 's') + 'Listo</button></div>' +
+    ent('nombre', 'Nombre', 'Compresor scroll 1') +
+    '<div class="dos-col">' + ent('codigo', 'Código', 'SAM-C1') + ent('serie', 'Serie', '') + '</div>' +
+    '<div class="dos-col">' + ent('marca', 'Marca', '') + ent('modelo', 'Modelo', '') + '</div>' +
+    '<div class="campo" style="margin-top:10px"><span class="etq">Estado</span><div class="fichas">' + ESTADOS.slice(0, 3).map(function(es) {
+      const act = (c.estado || 'Funcionando') === es;
+      return '<button type="button" class="ficha" data-acc="compEstado" data-i="' + i + '" data-v="' + esc(es) + '" aria-pressed="' + act + '">' + (act ? ico('check', 's') : '') + esc(es) + '</button>';
+    }).join('') + '</div></div>' +
+    ent('nota', 'Nota', 'Pantalla dañada, sigue funcionando') +
+    '<div class="fichas" style="margin-top:12px"><button type="button" class="ficha" data-acc="compHoras" data-i="' + i + '" aria-pressed="' + !!c.horas + '">' + (c.horas ? ico('check', 's') : '') + 'Lleva horas (horómetro)</button>' +
+    '<button type="button" class="ficha" data-acc="compQuitar" data-i="' + i + '">' + ico('close', 's') + 'Quitar componente</button></div></div>';
+}
+function fichasLecturas(d) {
+  const elegidas = listaLecturas(d.lecturas);
+  const todas = LECTURAS_BASE.concat(elegidas.filter(function(x) { return LECTURAS_BASE.indexOf(x) < 0; }));
+  return '<div class="fichas" id="c-lecturas">' + todas.map(function(l) {
+    const act = elegidas.indexOf(l) >= 0;
+    return '<button type="button" class="ficha" data-acc="lectura" data-v="' + esc(l) + '" aria-pressed="' + act + '">' + (act ? ico('check', 's') : '') + esc(l) + '</button>';
+  }).join('') + '<button type="button" class="ficha" data-acc="agregar" data-f="lecturas">' + ico('add', 's') + 'Otra lectura</button></div>' +
+    '<input class="entrada oculto" data-nuevo="lecturas" placeholder="Nombre y unidad, ej.: Flujo (L/min)" enterkeyhint="done" style="margin-top:8px">';
+}
+
 function htmlFormEquipo() {
   const F = S.form, d = F.d;
   if (!F.codigoTocado && d.tipo) d.codigo = proponerCodigo(d.tipo, d.id);
@@ -785,6 +875,14 @@ function htmlFormEquipo() {
     '<div class="campo" id="c-lubricacion"><span class="etq">Lubricación</span>' + fichas('lubricacion', LUBRICACION, d.lubricacion) + '</div>' +
     campoTexto('otros', 'Otros datos técnicos', d.otros, { largo: true, ph: 'Pureza de O₂, capacidad del tanque, tipo de motor…' }) +
     '</div></div>';
+  // Componentes (SAM, generadores…) y lecturas que se anotan en cada mantenimiento
+  h += '<div class="ancho"><h2 class="secc">Componentes <small>' + (F.comps.length ? F.comps.length : 'opcional') + '</small></h2>' +
+    '<p class="ayuda" style="margin:0 4px 10px">Para equipos formados por varias partes: compresores, secadores, tanque, tablero, válvulas…</p>' +
+    (F.comps.length ? '<div class="grupo" id="c-comps">' + F.comps.map(function(c, i) { return i === F.compAbierto ? editorComp(c, i, d) : filaComp(c, i, d, true); }).join('') + '</div>' : '') +
+    '<button type="button" class="btn sec" data-acc="compAgregar" style="margin-top:10px">' + ico('add') + 'Agregar componente</button>' +
+    '<h2 class="secc">Lecturas a registrar <small>opcional</small></h2>' +
+    '<p class="ayuda" style="margin:0 4px 10px">Se piden al registrar cada mantenimiento (por ejemplo, lo que marca la pantalla del tablero).</p>' +
+    fichasLecturas(d) + '</div>';
   // Plan de mantenimiento
   const okPlan = d.periodicidad && (d.periodicidad !== 'Por horas de uso' || Number(String(d.cadaHoras).replace(',', '.')) > 0) && (d.responsable !== 'Proveedor' || d.empresaMtto);
   h += '<div><h2 class="secc">Plan de mantenimiento ' + listo(!!okPlan) + '</h2><div class="tarjeta">' +
@@ -802,6 +900,9 @@ function htmlFormEquipo() {
 
 async function guardarEquipo() {
   const F = S.form, d = F.d;
+  F.comps = F.comps.filter(function(c) { return String(c.nombre).trim(); });
+  F.comps.forEach(function(c) { if (!String(c.codigo).trim()) c.codigo = proponerCodComp(d.codigo, c.nombre, F.comps); });
+  d.componentes = escribirComps(F.comps);
   const faltan = faltaEquipo(d, F.foto);
   if (faltan.length) { avisoFalta(faltan[0][0], faltan[0][1]); return; }
   d.codigo = String(d.codigo || '').trim().toUpperCase() || proponerCodigo(d.tipo, d.id);
@@ -848,7 +949,8 @@ function abrirFormMant(idEquipo) {
     tipo: 'mant', equipoId: e.id, fotos: [], informe: null, firmas: {}, sucio: false,
     d: { id: nuevoId('MT'), equipoId: e.id, codigo: e.codigo, equipo: e.nombre, sede: e.sede, fecha: hoyISO(), tipo: '', descripcion: '', repuestos: '',
       horometro: '', estadoFinal: '', quien: e.responsable === 'Proveedor' ? 'Proveedor' : '', tecnico: S.tecnico, empresa: e.responsable === 'Proveedor' ? (e.empresaMtto || '') : '',
-      nombreProv: '', orden: '', recibe: S.tecnico }
+      nombreProv: '', orden: '', recibe: S.tecnico, componentes: '', lecturas: '' },
+    lect: {}
   };
   abrir({ tipo: 'formMant' });
 }
@@ -888,6 +990,25 @@ function htmlFormMant() {
     campoTexto('repuestos', 'Repuestos', d.repuestos, { largo: true, ph: 'Filtro de aire 1622 0651 00 · 1 und', nota: 'opcional' }) +
     '<div class="campo" id="c-estadoFinal"><span class="etq">¿Cómo quedó el equipo?</span>' + fichas('estadoFinal', ESTADOS.slice(0, 3), d.estadoFinal) + '</div>' +
     '</div></div>';
+  // Componentes intervenidos y lecturas del tablero (si el equipo los tiene)
+  const comps = leerComps(e.componentes);
+  if (comps.length) {
+    const elegidos = String(d.componentes || '').split(', ').filter(Boolean);
+    h += '<div><h2 class="secc">¿Qué se intervino?</h2><div class="tarjeta"><div class="campo" id="c-componentes" style="margin-top:0"><span class="etq">Componentes<em>puedes elegir varios</em></span><div class="fichas">' +
+      ['Todo el sistema'].concat(comps.map(function(c) { return c.nombre; })).map(function(n) {
+        const act = elegidos.indexOf(n) >= 0;
+        return '<button type="button" class="ficha" data-acc="compMant" data-v="' + esc(n) + '" aria-pressed="' + act + '">' + (act ? ico('check', 's') : '') + esc(n) + '</button>';
+      }).join('') + '</div></div></div></div>';
+  }
+  const lecs = comps.filter(function(c) { return c.horas; }).map(function(c) { return { k: 'Horas ' + c.codigo, etq: 'Horas · ' + c.nombre, ph: horasComp(e, c.codigo) }; })
+    .concat(listaLecturas(e.lecturas).map(function(l) { return { k: l, etq: l, ph: '' }; }));
+  if (lecs.length) {
+    F.lect = F.lect || {};
+    F.lectOrden = lecs.map(function(l) { return l.k; });
+    h += '<div><h2 class="secc">Lecturas <small>opcional</small></h2><div class="tarjeta"><div class="dos-col" style="flex-wrap:wrap">' + lecs.map(function(l) {
+      return '<div class="campo" style="margin-top:10px"><label class="etq">' + esc(l.etq) + '</label><input class="entrada" data-lec="' + esc(l.k) + '" inputmode="decimal" value="' + esc(F.lect[l.k] || '') + '" placeholder="' + esc(l.ph ? 'antes ' + l.ph : '') + '" autocomplete="off"></div>';
+    }).join('') + '</div></div></div>';
+  }
   // Quién lo hizo
   let okQ = false;
   if (d.quien === 'Técnico de la clínica') okQ = !!(d.tecnico && F.firmas.firma);
@@ -929,6 +1050,10 @@ async function guardarMant() {
   d.descripcion = String(d.descripcion).trim();
   d.horometro = String(d.horometro).trim() === '' ? '' : Number(String(d.horometro).replace(',', '.'));
   if (d.quien === 'Proveedor') d.tecnico = ''; else { d.empresa = ''; d.nombreProv = ''; d.orden = ''; d.recibe = ''; }
+  // Lecturas en el orden en que se piden: "Horas SAM-C1: 2048 · Presión (psig): 79"
+  const lec = F.lect || {};
+  d.lecturas = (F.lectOrden || Object.keys(lec)).filter(function(k) { return String(lec[k] == null ? '' : lec[k]).trim() !== ''; })
+    .map(function(k) { return k + ': ' + String(lec[k]).trim().replace(/·/g, ''); }).join(' · ');
   d.registroPor = S.tecnico;
   d.registro = new Date().toISOString();
   const op = { accion: 'mant', m: JSON.parse(JSON.stringify(d)), fotoClaves: [], firma: F.firmas.firma || null, firmaRecibe: d.quien === 'Proveedor' ? (F.firmas.firmaRecibe || null) : null };
@@ -1118,6 +1243,17 @@ function enlazar() {
       if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) { /* nada */ } }
       return;
     }
+    if (t.dataset.c && S.form && S.form.comps) {
+      const c = S.form.comps[Number(t.dataset.i)];
+      if (c) { c[t.dataset.c] = t.value; S.form.sucio = true; }
+      return;
+    }
+    if (t.dataset.lec && S.form) {
+      S.form.lect = S.form.lect || {};
+      S.form.lect[t.dataset.lec] = t.value;
+      S.form.sucio = true;
+      return;
+    }
     if (t.dataset.f && S.form) {
       S.form.d[t.dataset.f] = t.value;
       S.form.sucio = true;
@@ -1131,6 +1267,15 @@ function enlazar() {
   };
   raiz.onchange = async function(ev) {
     const t = ev.target;
+    if (t.dataset.nuevo === 'lecturas') {
+      const v = t.value.trim();
+      if (v && S.form) {
+        const l = listaLecturas(S.form.d.lecturas);
+        if (!l.some(function(x) { return normal(x) === normal(v); })) l.push(v.charAt(0).toUpperCase() + v.slice(1).replace(/;/g, ','));
+        S.form.d.lecturas = l.join('; '); S.form.sucio = true;
+      }
+      pintarForm(); return;
+    }
     if (t.dataset.nuevo) { confirmarNuevo(t); return; }
     if (t.id === 'archFoto' && t.files[0]) {
       try {
@@ -1182,6 +1327,13 @@ function confirmarNuevo(input) {
   pintarForm();
 }
 
+/** Al cerrar el editor de un componente se propone su código si quedó vacío. */
+function cerrarComp(F) {
+  const c = F.comps[F.compAbierto];
+  if (c && String(c.nombre).trim() && !String(c.codigo).trim()) c.codigo = proponerCodComp(F.d.codigo, c.nombre, F.comps);
+  if (c && !String(c.nombre).trim()) F.comps.splice(F.compAbierto, 1);
+}
+
 function accion(a, b) {
   const F = S.form;
   switch (a) {
@@ -1221,6 +1373,40 @@ function accion(a, b) {
       if (F.firmas && (l[0] || '') !== antes) delete F.firmas.firma;
       F.sucio = true;
       pintarForm();
+      break;
+    }
+    case 'compAgregar': {
+      F.comps.push({ codigo: '', nombre: '', marca: '', modelo: '', serie: '', horas: false, estado: 'Funcionando', nota: '' });
+      F.compAbierto = F.comps.length - 1; F.sucio = true; pintarForm();
+      const inp = $('[data-c="nombre"][data-i="' + F.compAbierto + '"]');
+      if (inp) inp.focus();
+      break;
+    }
+    case 'compAbrir': cerrarComp(F); F.compAbierto = Number(b.dataset.i); pintarForm(); break;
+    case 'compListo': cerrarComp(F); F.compAbierto = -1; pintarForm(); break;
+    case 'compEstado': F.comps[Number(b.dataset.i)].estado = b.dataset.v; F.sucio = true; pintarForm(); break;
+    case 'compHoras': { const c = F.comps[Number(b.dataset.i)]; c.horas = !c.horas; F.sucio = true; pintarForm(); break; }
+    case 'compQuitar': {
+      const c = F.comps[Number(b.dataset.i)];
+      if (c && c.nombre && !confirm('¿Quitar «' + c.nombre + '» de los componentes?')) break;
+      F.comps.splice(Number(b.dataset.i), 1); F.compAbierto = -1; F.sucio = true; pintarForm();
+      break;
+    }
+    case 'lectura': {
+      let l = listaLecturas(F.d.lecturas);
+      l = l.indexOf(b.dataset.v) >= 0 ? l.filter(function(x) { return x !== b.dataset.v; }) : l.concat([b.dataset.v]);
+      F.d.lecturas = l.join('; '); F.sucio = true; pintarForm();
+      break;
+    }
+    case 'compMant': {
+      let l = String(F.d.componentes || '').split(', ').filter(Boolean);
+      const v = b.dataset.v;
+      if (v === 'Todo el sistema') l = l.indexOf(v) >= 0 ? [] : [v];
+      else {
+        l = l.filter(function(x) { return x !== 'Todo el sistema'; });
+        l = l.indexOf(v) >= 0 ? l.filter(function(x) { return x !== v; }) : l.concat([v]);
+      }
+      F.d.componentes = l.join(', '); F.sucio = true; pintarForm();
       break;
     }
     case 'noaplica': F.d[b.dataset.f] = F.d[b.dataset.f] === 'No aplica' ? '' : 'No aplica'; F.sucio = true; pintarForm(); break;
@@ -1644,13 +1830,52 @@ async function construirPdf(e) {
     { e: 'Próximo preventivo', v: p.proximo ? fFechaPdf(p.proximo) : p.texto, tipo: p.proximo ? 'prox' : '' },
     { e: 'Manual del fabricante', v: e.manual }], 3, y, String(e.recomendaciones || '').trim());
 
-  // 5. Historial de intervenciones, con la firma de quien lo hizo
+  // Bordes del recuadro de una tabla con franja de título (también si la tabla siguió en otra página)
+  function cerrarRecuadro(yIni, paginaIni) {
+    color(BORDE, 'd'); doc.setLineWidth(0.3);
+    if (doc.getNumberOfPages() === paginaIni) {
+      doc.roundedRect(M, yIni, W - 2 * M, doc.lastAutoTable.finalY - yIni, 2.5, 2.5, 'S');
+    } else {
+      doc.setPage(paginaIni);
+      doc.line(M, yIni + 2.5, M, yIni + TITULO_ALTO); doc.line(W - M, yIni + 2.5, W - M, yIni + TITULO_ALTO);
+      doc.setPage(doc.getNumberOfPages());
+    }
+  }
+  let nSec = 5;
+
+  // 5. Componentes (si el equipo es un sistema: SAM, generadores…)
+  const comps = leerComps(e.componentes);
+  if (comps.length) {
+    if (y + TITULO_ALTO + 24 > ABAJO) y = nueva();
+    const yC = y, pagC = doc.getNumberOfPages();
+    franjaTitulo(nSec++, 'Componentes', M, y, W - 2 * M);
+    doc.autoTable({
+      startY: y + TITULO_ALTO, margin: { left: M, right: M, top: ARRIBA, bottom: 16 }, theme: 'grid',
+      styles: { font: 'helvetica', fontSize: 8.8, textColor: TINTA, lineColor: LINEAS, lineWidth: 0.2, cellPadding: { top: 1.6, bottom: 1.6, left: 2.5, right: 2.5 }, valign: 'top', fillColor: [255, 255, 255] },
+      head: [['CÓDIGO', 'COMPONENTE', 'MARCA / MODELO', 'SERIE', 'HORAS', 'ESTADO']],
+      headStyles: { fillColor: [250, 246, 247], textColor: [74, 52, 58], fontStyle: 'bold', fontSize: 7.4 },
+      body: comps.map(function(c) {
+        const hs = c.horas ? horasComp(e, c.codigo) : '';
+        return [c.codigo, c.nombre + (c.nota ? '\n' + c.nota : ''), [c.marca, c.modelo].filter(Boolean).join(' ') || '—', c.serie || '—',
+          c.horas ? (hs !== '' ? num(hs) + ' h' : '—') : '—', c.estado || 'Funcionando'];
+      }),
+      columnStyles: { 0: { cellWidth: 22, fontStyle: 'bold' }, 2: { cellWidth: 36 }, 3: { cellWidth: 28 }, 4: { cellWidth: 18 }, 5: { cellWidth: 30, fontStyle: 'bold' } },
+      didParseCell: function(dt) {
+        if (dt.section === 'body' && dt.column.index === 5) { const c = ESTADOS[dt.cell.raw] || ESTADOS['Dado de baja']; dt.cell.styles.textColor = c[1]; }
+      }
+    });
+    cerrarRecuadro(yC, pagC);
+    y = doc.lastAutoTable.finalY + 4;
+  }
+
+  // Historial de intervenciones, con la firma de quien lo hizo
   const filasMt = ms.map(function(m) {
     const quien = m.quien === 'Proveedor'
       ? (m.empresa || 'Proveedor') + '\n' + nombreBonito(m.nombreProv) + (m.orden ? '\nOrden: ' + m.orden : '') + (m.recibe ? '\nRecibió: ' + nombreBonito(m.recibe) : '')
       : nombresTec(m.tecnico) + '\n(Clínica)';
     return [fFechaPdf(m.fecha), m.tipo + (m.horometro !== '' && m.horometro != null ? '\n' + num(m.horometro) + ' h' : ''),
-      m.descripcion + (m.repuestos ? '\nRepuestos: ' + m.repuestos : '') + (m.estadoFinal ? '\nQuedó: ' + m.estadoFinal : ''), quien, ''];
+      m.descripcion + (m.repuestos ? '\nRepuestos: ' + m.repuestos : '') + (m.componentes ? '\nComponentes: ' + m.componentes : '') +
+        (m.lecturas ? '\nLecturas: ' + m.lecturas : '') + (m.estadoFinal ? '\nQuedó: ' + m.estadoFinal : ''), quien, ''];
   });
   const opcHist = function(startY) {
     return {
@@ -1664,7 +1889,7 @@ async function construirPdf(e) {
   };
   if (y + TITULO_ALTO + 30 > ABAJO) y = nueva();
   const yHist = y, paginaHist = doc.getNumberOfPages();
-  franjaTitulo(5, 'Historial de intervenciones', M, y, W - 2 * M);
+  franjaTitulo(nSec++, 'Historial de intervenciones', M, y, W - 2 * M);
   const oh = opcHist(y + TITULO_ALTO);
   oh.didDrawCell = function(dt) {
     if (dt.section !== 'body' || dt.column.index !== 4 || !ms[dt.row.index]) return;
@@ -1672,15 +1897,7 @@ async function construirPdf(e) {
     if (imgSegura(fi)) doc.addImage(fi, 'PNG', dt.cell.x + 1, dt.cell.y + 1.5, dt.cell.width - 2, Math.min(dt.cell.height - 3, (dt.cell.width - 2) / 3));
   };
   doc.autoTable(oh);
-  // Borde exterior del recuadro (si la tabla quedó en la misma página)
-  if (doc.getNumberOfPages() === paginaHist) {
-    color(BORDE, 'd'); doc.setLineWidth(0.3);
-    doc.roundedRect(M, yHist, W - 2 * M, doc.lastAutoTable.finalY - yHist, 2.5, 2.5, 'S');
-  } else {
-    doc.setPage(paginaHist); color(BORDE, 'd'); doc.setLineWidth(0.3);
-    doc.line(M, yHist + 2.5, M, yHist + TITULO_ALTO); doc.line(W - M, yHist + 2.5, W - M, yHist + TITULO_ALTO);
-    doc.setPage(doc.getNumberOfPages());
-  }
+  cerrarRecuadro(yHist, paginaHist);
   y = doc.lastAutoTable.finalY + 8;
 
   // Firmas Elaboró / Revisó
@@ -1707,7 +1924,7 @@ async function construirPdf(e) {
     const anchoG = W - 2 * M, cw = (anchoG - 12) / 2, ch = 64, filaAlto = ch + 4;
     y += 10;
     if (y + 10 + TITULO_ALTO + filaAlto + 4 > ABAJO) y = nueva();
-    titulo(6, 'Registro fotográfico', M + 1, y + 4);
+    titulo(nSec++, 'Registro fotográfico', M + 1, y + 4);
     y += 9;
     const cabeceraGrupo = function(g, sigue) {
       color([255, 255, 255], 'f'); doc.roundedRect(M, y, anchoG, TITULO_ALTO, 2.5, 2.5, 'F');

@@ -74,6 +74,8 @@ const COLS_EQ = [
   ['empresaMtto', 'Empresa de mantenimiento', 'TEXT'],
   ['manual', 'Manual del fabricante', 'TEXT'],
   ['recomendaciones', 'Recomendaciones del fabricante', 'TEXT'],
+  ['componentes', 'Componentes', 'TEXT'],
+  ['lecturas', 'Lecturas a registrar', 'TEXT'],
   ['ultimo', 'Último preventivo', 'DATE'],
   ['proximo', 'Próximo preventivo', 'DATE'],
   ['foto', 'Foto del equipo', 'CHIP'],
@@ -95,6 +97,8 @@ const COLS_MT = [
   ['repuestos', 'Repuestos', 'TEXT'],
   ['horometro', 'Horómetro (h)', 'DOUBLE'],
   ['estadoFinal', 'Estado al terminar', 'DROPDOWN:ESTADOS'],
+  ['componentes', 'Componentes intervenidos', 'TEXT'],
+  ['lecturas', 'Lecturas', 'TEXT'],
   ['quien', 'Realizado por', 'DROPDOWN:QUIEN'],
   ['tecnico', 'Técnico de la clínica', 'TEXT'],
   ['empresa', 'Empresa proveedora', 'TEXT'],
@@ -168,6 +172,7 @@ function asegurarHojas(libro) {
   if (!libro.getSheetByName(H_EQ)) crearTabla(libro, H_EQ, COLS_EQ, cfg, 0);
   if (!libro.getSheetByName(H_MT)) crearTabla(libro, H_MT, COLS_MT, cfg, 1);
   renombrarEncabezados(libro);
+  agregarColumnasNuevas(libro);
   crearSimple(libro, H_HIS, ['Fecha', 'Técnico', 'Acción', 'ID', 'Detalle'], false);
   if (crearSimple(libro, H_ARC, ['ID', 'Campo', 'Enlaces'], true)) { /* nueva */ }
   crearSimple(libro, H_MIN, ['Clave', 'Imagen'], true);
@@ -291,6 +296,36 @@ function renombrarEncabezados(libro) {
       const nuevo = RENOMBRES[String(t).trim()];
       if (nuevo && cab.indexOf(nuevo) < 0) h.getRange(1, i + 1).setValue(nuevo);
     });
+  });
+}
+
+/**
+ * Columnas que la app agregó después de crear la hoja (por ejemplo Componentes y Lecturas):
+ * se escriben al final del encabezado y se intenta ampliar la tabla para que queden dentro.
+ */
+function agregarColumnasNuevas(libro) {
+  [[H_EQ, COLS_EQ], [H_MT, COLS_MT]].forEach(function(par) {
+    const h = libro.getSheetByName(par[0]);
+    if (!h) return;
+    const ultima = h.getLastColumn();
+    const cab = h.getRange(1, 1, 1, ultima).getValues()[0].map(function(t) { return String(t).trim(); });
+    const faltan = par[1].filter(function(c) { return cab.indexOf(c[1]) < 0 && Object.keys(RENOMBRES).every(function(k) { return RENOMBRES[k] !== c[1] || cab.indexOf(k) < 0; }); });
+    if (!faltan.length) return;
+    h.getRange(1, ultima + 1, 1, faltan.length).setValues([faltan.map(function(c) { return c[1]; })]);
+    h.getRange(2, ultima + 1, Math.max(h.getMaxRows() - 1, 1), faltan.length).setNumberFormat('@');
+    faltan.forEach(function(c, i) { h.setColumnWidth(ultima + 1 + i, 260); });
+    const tablaId = PropertiesService.getScriptProperties().getProperty('TABLA_' + par[0]);
+    if (!tablaId) return;
+    try {
+      const info = Sheets.Spreadsheets.get(libro.getId(), { fields: 'sheets(properties.sheetId,tables(tableId,range))' });
+      let rango = null;
+      info.sheets.forEach(function(sh) { (sh.tables || []).forEach(function(t) { if (t.tableId === tablaId) rango = t.range; }); });
+      if (!rango) return;
+      rango.endColumnIndex = ultima + faltan.length;
+      Sheets.Spreadsheets.batchUpdate({ requests: [{ updateTable: { table: { tableId: tablaId, range: rango }, fields: 'range' } }] }, libro.getId());
+    } catch (e) {
+      Logger.log('No se pudo ampliar la tabla ' + par[0] + ': ' + e.message);
+    }
   });
 }
 

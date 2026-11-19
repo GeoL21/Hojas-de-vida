@@ -7,7 +7,7 @@
  *****************************************************************/
 
 const NOMBRE = 'hojas-vida';
-const VERSION = NOMBRE + '-v10';
+const VERSION = NOMBRE + '-v11';
 
 const ARCHIVOS = [
   './', 'index.html', 'app.js', 'iconos.js', 'config.js', 'manifest.webmanifest', 'logo.jpg', 'logo-pdf.png',

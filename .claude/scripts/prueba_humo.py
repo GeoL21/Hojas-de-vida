@@ -78,11 +78,21 @@ with sync_playwright() as p:
     pg.click('[data-acc=elige][data-f=periodicidad][data-v=Trimestral]'); pg.click('[data-acc=elige][data-f=responsable][data-v=Proveedor]'); pg.wait_for_timeout(200)
     pg.click('[data-acc=agregar][data-f=empresaMtto]'); pg.fill('[data-nuevo=empresaMtto]', 'servicompresores sas'); pg.press('[data-nuevo=empresaMtto]', 'Enter'); pg.wait_for_timeout(200)
     pg.click('[data-acc=elige][data-f=manual][data-v=Sí]')
+    # Componentes y lecturas
+    pg.click('[data-acc=compAgregar]'); pg.wait_for_timeout(150)
+    pg.fill('[data-c=nombre][data-i="0"]', 'Compresor scroll 1'); pg.click('[data-acc=compHoras][data-i="0"]'); pg.wait_for_timeout(100)
+    pg.click('[data-acc=compListo]'); pg.wait_for_timeout(100)
+    pg.click('[data-acc=compAgregar]'); pg.wait_for_timeout(150)
+    pg.fill('[data-c=nombre][data-i="1"]', 'Pantalla de control'); pg.click('[data-acc=compEstado][data-i="1"][data-v="Con observaciones"]'); pg.wait_for_timeout(100)
+    pg.fill('[data-c=nota][data-i="1"]', 'Dañada, sigue funcionando'); pg.click('[data-acc=compListo]'); pg.wait_for_timeout(100)
+    pg.click('[data-acc=lectura][data-v="Presión (psig)"]'); pg.wait_for_timeout(100)
+    captura(pg, '03b_componentes')
     pg.fill('[data-f=recomendaciones]', 'Cada 2000h o 3000h necesita cambio de: aceite lubricante, filtro de aceite, filtro de aire, cartucho separador de aceite y revisión general de correas y mangueras')
     print('Código propuesto:', pg.input_value('[data-f=codigo]'), '| empresa:', pg.inner_text('[data-campo=empresaMtto] [aria-pressed=true]'))
     pg.evaluate('window.scrollTo(0,0)'); captura(pg, '03_form_equipo')
     pg.click('[data-acc=guardarEquipo]'); pg.wait_for_timeout(1200)
     captura(pg, '04_detalle')
+    print('Componentes guardados:', repr(SRV['eq'][0].get('componentes')) if SRV['eq'] else None, '| lecturas:', SRV['eq'][0].get('lecturas') if SRV['eq'] else None)
     print('Llamadas:', SRV['llamadas'], '| equipos en servidor:', len(SRV['eq']), SRV['eq'][0]['codigo'] if SRV['eq'] else '')
     # Mantenimiento SIN SEÑAL por proveedor
     ctx.set_offline(True); pg.evaluate("window.dispatchEvent(new Event('offline'))")
@@ -90,6 +100,9 @@ with sync_playwright() as p:
     pg.click('[data-acc=elige][data-f=tipo][data-v=Preventivo]'); pg.fill('[data-f=horometro]', '12430')
     pg.fill('[data-f=descripcion]', 'Cambio de filtro de aire y aceite, revisión de correas.')
     pg.click('[data-acc=elige][data-f=estadoFinal][data-v=Funcionando]')
+    pg.click('[data-acc=compMant][data-v="Compresor scroll 1"]'); pg.wait_for_timeout(150)
+    pg.fill('[data-lec="Horas SA-C1"], [data-lec^="Horas "]', '2048'); pg.fill('[data-lec="Presión (psig)"]', '79')
+    captura(pg, '05a_componentes_mant')
     pg.click('[data-acc=guardarMant]'); pg.wait_for_timeout(300); print('Aviso mant:', pg.inner_text('#toast'))
     pg.wait_for_timeout(200)
     pg.fill('[data-f=nombreProv]', 'Carlos Pérez')
@@ -108,6 +121,7 @@ with sync_playwright() as p:
     print('Cola sin señal:', pg.evaluate('S.cola.length'), '| franja:', pg.inner_text('#franja'))
     captura(pg, '06_detalle_sin_senal')
     ctx.set_offline(False); pg.evaluate("window.dispatchEvent(new Event('online'))"); pg.wait_for_timeout(1500)
+    print('Mant componentes/lecturas:', SRV['mt'][0].get('componentes') if SRV['mt'] else None, '|', SRV['mt'][0].get('lecturas') if SRV['mt'] else None)
     print('Tras volver la señal: cola', pg.evaluate('S.cola.length'), '| mt en servidor', len(SRV['mt']), '| campos enviados', SRV.get('ultimoMt', {}).keys())
     # Lo último de la pantalla del equipo no debe quedar tapado por el botón fijo
     pg.evaluate('window.scrollTo(0, document.body.scrollHeight)'); pg.wait_for_timeout(300)
@@ -130,6 +144,7 @@ with sync_playwright() as p:
     dos = SRV['mt'][-1].get('tecnico') if len(SRV['mt']) > 1 else None
     print('Técnicos enviados:', dos)
     if dos != 'JORGE ORTIZ, KENSY DÍAZ': errs.append('No se guardaron los dos técnicos: %r' % dos)
+    print('Horas en la app:', pg.evaluate("(() => { const e = equipos()[0]; return [leerComps(e.componentes).map(c => c.codigo), mantsDe(e).map(m => m.lecturas), horasComp(e, 'CP-C1')]; })()"))
     # PDF
     with pg.expect_download() as dl:
         pg.click('.cab [data-acc=pdf]'); pg.wait_for_selector('.hoja', timeout=15000)
