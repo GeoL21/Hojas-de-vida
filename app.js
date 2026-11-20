@@ -12,7 +12,7 @@
 
 'use strict';
 
-const VERSION_APP = '1.3.3';
+const VERSION_APP = '1.3.4';
 const PREF = 'hojas-vida:';   // prefijo propio en el almacenamiento (paso 8 de la skill)
 
 const FORMATO = { codigo: 'FMT-004', version: '1', fecha: '25/03/2012' };
@@ -870,7 +870,7 @@ function htmlFormEquipo() {
   h += '<div><h2 class="secc">Datos técnicos</h2><div class="tarjeta">' +
     '<div class="dos-col">' + campoTexto('potencia', 'Potencia', d.potencia, { ph: '7,5 kW · 10 HP' }) + campoTexto('voltaje', 'Voltaje', d.voltaje, { ph: '440 V' }) + '</div>' +
     '<div class="campo" id="c-fases"><span class="etq">Fases</span>' + fichas('fases', FASES, d.fases) + '</div>' +
-    '<div class="dos-col">' + campoTexto('corriente', 'Corriente', d.corriente, { ph: '12 A' }) + campoTexto('caudal', 'Caudal', d.caudal, { ph: '21 CFM · 40 L/min' }) + '</div>' +
+    '<div class="dos-col">' + campoTexto('corriente', 'Corriente', d.corriente, { ph: '12 A' }) + campoTexto('caudal', 'Caudal', d.caudal, { ph: '0,8 m³/min · 28 CFM' }) + '</div>' +
     campoTexto('presion', 'Presión de trabajo', d.presion, { ph: '7,5 bar · 110 psi' }) +
     '<div class="campo" id="c-lubricacion"><span class="etq">Lubricación</span>' + fichas('lubricacion', LUBRICACION, d.lubricacion) + '</div>' +
     campoTexto('otros', 'Otros datos técnicos', d.otros, { largo: true, ph: 'Pureza de O₂, capacidad del tanque, tipo de motor…' }) +
