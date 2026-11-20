@@ -1698,7 +1698,7 @@ async function construirPdf(e) {
   const letra = function(tam, negrita) { doc.setFont('helvetica', negrita ? 'bold' : 'normal'); doc.setFontSize(tam); };
   const nueva = function() { doc.addPage(); return ARRIBA; };
   const val = function(t) { t = String(t == null ? '' : t).trim(); return t || '—'; };
-  const ESTADOS = { 'Funcionando': [[227, 244, 232], [30, 107, 58]], 'Con observaciones': [[255, 243, 220], [122, 74, 0]],
+  const ESTADOS = { 'Funcionando': [[227, 244, 232], [0, 140, 60]], 'Con observaciones': [[255, 243, 220], [122, 74, 0]],
     'Fuera de servicio': [[252, 228, 225], [179, 38, 30]], 'Dado de baja': [[236, 236, 236], [90, 90, 90]] };
 
   // Imagen recortada para llenar el recuadro, con esquinas redondeadas
