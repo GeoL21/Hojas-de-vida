@@ -513,9 +513,12 @@ function htmlEquipos() {
   const lista = filtrados();
   const conteo = function(t) { return todos.filter(function(e) { return (!S.filtroSede || e.sede === S.filtroSede) && (t === 'Todos' || e.tipo === t); }).length; };
   const tipos = ['Todos'].concat(S.cfg.tipos.filter(function(t) { return todos.some(function(e) { return e.tipo === t; }); }));
-  let h = cabecera('Hojas de vida', ctxPrincipal());
+  let h = '<div class="cab-eq">' + cabecera('Hojas de vida', ctxPrincipal());
   h += '<label class="buscar">' + ico('search') + '<span class="sr">Buscar</span><input id="buscar" type="search" placeholder="Buscar equipo, serie o código…" value="' + esc(S.buscar) + '" autocomplete="off"></label>';
-  h += '<div class="filtros" role="group" aria-label="Sede">' + ['', ].concat(S.cfg.sedes).map(function(s) {
+  h += '<button type="button" class="btn solo-pc nuevo-pc" data-acc="nuevoEquipoPC">' + ico('add') + 'Nuevo equipo</button>' +
+    '<a class="btn-ic solo-pc portal-pc" href="https://geol21.github.io/" aria-label="Abrir el portal de apps">' + ico('apps') + '</a></div>';
+  // En el PC las sedes y los tipos van en una sola fila
+  h += '<div class="filtros-juntos"><div class="filtros" role="group" aria-label="Sede">' + ['', ].concat(S.cfg.sedes).map(function(s) {
     const act = S.filtroSede === s;
     return '<button type="button" class="ficha" data-acc="fsede" data-v="' + esc(s) + '" aria-pressed="' + act + '">' + (act ? ico('check', 's') : '') + (s || 'Las dos sedes') + '</button>';
   }).join('') + '</div>';
@@ -523,7 +526,7 @@ function htmlEquipos() {
     const act = S.filtroTipo === t;
     return '<button type="button" class="ficha" data-acc="ftipo" data-v="' + esc(t) + '" aria-pressed="' + act + '">' + (act ? ico('check', 's') : '') +
       esc(t === 'SAM (planta de aire medicinal)' ? 'SAM' : t) + ' <span class="n">' + conteo(t) + '</span></button>';
-  }).join('') + '</div>';
+  }).join('') + '</div></div>';
 
   if (!todos.length) {
     h += '<div class="vacio">' + ico('home_repair_service', 'l') + '<b>Registra el primer equipo</b>Compresores, bombas de vacío, SAM, generadores de oxígeno… Cada uno con su foto, datos técnicos y plan de mantenimiento.</div>';
@@ -582,12 +585,13 @@ function tablaPC(lista) {
 function detallePC() {
   const e = equipo(S.selPC);
   if (!e) return '';
-  return '<div class="foto-eq"><span class="grande">' + (imgSegura(S.minis['EQ:' + e.id]) ? '<img src="' + S.minis['EQ:' + e.id] + '" alt="">' : ico(ICONO_TIPO[e.tipo] || 'precision_manufacturing', 'l')) + '</span>' +
-    '<div><p style="font-size:24px;font-weight:860;line-height:1.15">' + esc(e.nombre) + '</p><p class="ayuda">' + esc(e.codigo) + ' · ' + esc(e.sede) + '</p>' + chipEstado(e.estado) + '</div></div>' +
-    tarjetaPreventivo(e) + bloquesEquipo(e, true) +
-    '<div class="dos-col" style="margin-top:18px"><button type="button" class="btn" data-acc="nuevoMant" data-id="' + esc(e.id) + '">' + ico('build') + 'Registrar mantenimiento</button>' +
-    '<button type="button" class="btn sec" data-acc="pdf" data-id="' + esc(e.id) + '">' + ico('picture_as_pdf') + 'Generar PDF</button></div>' +
-    '<button type="button" class="btn sec" style="margin-top:10px" data-acc="editarEquipo" data-id="' + esc(e.id) + '">' + ico('edit') + 'Editar hoja de vida</button>';
+  const mm = [e.marca, e.modelo].filter(Boolean).join(' ');
+  return '<div class="foto-eq det-cab"><span class="grande">' + (imgSegura(S.minis['EQ:' + e.id]) ? '<img src="' + S.minis['EQ:' + e.id] + '" alt="">' : ico(ICONO_TIPO[e.tipo] || 'precision_manufacturing', 'l')) + '</span>' +
+    '<div class="det-nombre"><p class="det-titulo">' + esc(e.nombre) + '</p><p class="ayuda">' + esc([e.codigo, e.sede, mm].filter(Boolean).join(' · ')) + '</p>' + chipEstado(e.estado) + '</div>' +
+    '<div class="det-botones"><button type="button" class="btn" data-acc="nuevoMant" data-id="' + esc(e.id) + '">' + ico('build') + 'Registrar mantenimiento</button>' +
+    '<div class="dos-col"><button type="button" class="btn sec" data-acc="pdf" data-id="' + esc(e.id) + '">' + ico('picture_as_pdf') + 'PDF</button>' +
+    '<button type="button" class="btn sec" data-acc="editarEquipo" data-id="' + esc(e.id) + '">' + ico('edit') + 'Editar</button></div></div></div>' +
+    tarjetaPreventivo(e) + '<div class="det-rejilla">' + bloquesEquipo(e, true) + '</div>';
 }
 
 function chipEstado(est) {
@@ -614,27 +618,27 @@ function grupoPares(pares) {
 }
 
 function bloquesEquipo(e, compacto) {
-  let h = '<h2 class="secc">Identificación</h2>' + grupoPares([
+  let h = '<div class="bloq b-id"><h2 class="secc">Identificación</h2>' + grupoPares([
     ['Tipo', e.tipo], ['Marca · modelo', [e.marca, e.modelo].filter(Boolean).join(' · ')], ['Serie', e.serie],
-    ['Sede · ubicación', [e.sede, e.ubicacion].filter(Boolean).join(' · ')]]);
-  h += '<h2 class="secc">Adquisición</h2>' + grupoPares([
+    ['Sede · ubicación', [e.sede, e.ubicacion].filter(Boolean).join(' · ')]]) + '</div>';
+  h += '<div class="bloq b-adq"><h2 class="secc">Adquisición</h2>' + grupoPares([
     ['Proveedor', e.proveedor], ['Instalación', fFecha(e.instalacion) + (e.forma ? ' · ' + e.forma : '')],
-    ['Garantía hasta', fFecha(e.garantia)], ['Registro INVIMA', e.invima], ['Clasificación de riesgo', e.riesgo]]);
-  h += '<h2 class="secc">Datos técnicos</h2>' + grupoPares([
+    ['Garantía hasta', fFecha(e.garantia)], ['Registro INVIMA', e.invima], ['Clasificación de riesgo', e.riesgo]]) + '</div>';
+  h += '<div class="bloq b-tec"><h2 class="secc">Datos técnicos</h2>' + grupoPares([
     ['Potencia', e.potencia], ['Voltaje · fases', [e.voltaje, e.fases].filter(Boolean).join(' · ')], ['Corriente', e.corriente],
-    ['Caudal', e.caudal], ['Presión de trabajo', e.presion], ['Lubricación', e.lubricacion], ['Otros', e.otros]]);
+    ['Caudal', e.caudal], ['Presión de trabajo', e.presion], ['Lubricación', e.lubricacion], ['Otros', e.otros]]) + '</div>';
   const comps = leerComps(e.componentes);
-  if (comps.length) h += '<h2 class="secc">Componentes <small>' + comps.length + '</small></h2><div class="grupo">' +
-    comps.map(function(c, i) { return filaComp(c, i, e, false); }).join('') + '</div>';
-  h += '<h2 class="secc">Plan de mantenimiento</h2>' + grupoPares([
+  if (comps.length) h += '<div class="bloq b-comp"><h2 class="secc">Componentes <small>' + comps.length + '</small></h2><div class="grupo">' +
+    comps.map(function(c, i) { return filaComp(c, i, e, false); }).join('') + '</div></div>';
+  h += '<div class="bloq b-plan"><h2 class="secc">Plan de mantenimiento</h2>' + grupoPares([
     ['Periodicidad', e.periodicidad === 'Por horas de uso' ? 'Cada ' + num(e.cadaHoras) + ' h de uso' : e.periodicidad],
     ['Responsable', e.responsable === 'Proveedor' ? 'Proveedor · ' + (e.empresaMtto || '') : e.responsable],
-    ['Manual del fabricante', e.manual], ['Recomendaciones', e.recomendaciones]]);
+    ['Manual del fabricante', e.manual], ['Recomendaciones', e.recomendaciones]]) + '</div>';
   const ms = mantsDe(e);
-  h += '<h2 class="secc">Historial <small>' + plural(ms.length, 'intervención', 'intervenciones') + '</small></h2>';
-  h += ms.length ? '<div class="grupo">' + ms.slice(0, compacto ? 6 : 999).map(filaMant).join('') + '</div>'
+  h += '<div class="bloq b-hist"><h2 class="secc">Historial <small>' + plural(ms.length, 'intervención', 'intervenciones') + '</small></h2>';
+  h += ms.length ? '<div class="grupo">' + ms.slice(0, compacto ? 6 : 999).map(function(m) { return filaMant(m); }).join('') + '</div>'
     : '<div class="grupo"><div class="fila"><span class="ayuda">Aún no hay mantenimientos registrados.</span></div></div>';
-  return h;
+  return h + '</div>';
 }
 
 function filaMant(m, conEquipo) {
@@ -1344,7 +1348,7 @@ function accion(a, b) {
     case 'fmt': S.filtroMt = b.dataset.v; pintar(false); break;
     case 'equipo': abrir({ tipo: 'equipo', id: b.dataset.id }); break;
     case 'selPC': S.selPC = b.dataset.id; pintar(false); break;
-    case 'nuevoEquipo': abrirFormEquipo(); break;
+    case 'nuevoEquipo': case 'nuevoEquipoPC': abrirFormEquipo(); break;
     case 'editarEquipo': abrirFormEquipo(b.dataset.id); break;
     case 'nuevoMant': abrirFormMant(b.dataset.id); break;
     case 'pdf': generarPdf(b.dataset.id); break;
