@@ -432,7 +432,7 @@ function irVista(v) {
 
 
 /***********************
- * PC · PRUEBA DE DISEÑO (tablero de tres columnas). En el celular no cambia nada.
+ * PC: tablero de tres columnas (desde 1024 px). En el celular sigue PixelUI.
  ***********************/
 
 const PC_MQ = window.matchMedia ? window.matchMedia('(min-width:1024px)') : { matches: false };
