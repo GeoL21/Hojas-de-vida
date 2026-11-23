@@ -454,7 +454,7 @@ function grupoPrev(p) {
   if (p.clase === 'ambar') return p.proximo || /en \d/.test(p.texto) ? 'proximo' : 'sinreg';
   return 'aldia';
 }
-const GRUPOS_PREV = [['atrasado', 'Atrasados', '#111827'], ['proximo', 'Próximos', '#F97316'], ['sinreg', 'Sin registro', '#2F6BFF'], ['aldia', 'Al día', '#16A34A']];
+const GRUPOS_PREV = [['atrasado', 'Atrasados', '#000000'], ['proximo', 'Próximos', '#F97316'], ['sinreg', 'Sin registro', '#2F6BFF'], ['aldia', 'Al día', '#16A34A']];
 
 function chipPrev(p) {
   const g = grupoPrev(p);
