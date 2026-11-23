@@ -32,7 +32,7 @@ En GitHub abre `config.js`, toca el lápiz, reemplaza `PEGA_AQUI_LA_URL_DE_APPS_
 ## Instalarla
 
 - **Celular (Chrome):** abre el enlace, entra con el código, elige sede y técnico, y en el menú ⋮ toca **Instalar app** (o **Ajustes → Instalar** dentro de la app).
-- **PC (Chrome o Edge):** abre el enlace y toca el ícono de instalar en la barra de direcciones. En el PC se ve como tablero: menú lateral, vista general con los preventivos, tabla de equipos y la ficha del equipo a la derecha.
+- **PC (Chrome o Edge):** abre el enlace y toca el ícono de instalar en la barra de direcciones. En el PC se ve con menú lateral, tabla de equipos y detalle al lado.
 
 ## Qué hay en la hoja
 
