@@ -265,6 +265,7 @@ const S = {
   pila: [],                    // pantallas internas abiertas (equipo, formEquipo, formMant)
   filtroTipo: 'Todos', filtroSede: '', buscar: '', filtroMt: 'Todos',
   selPC: '',                   // equipo elegido en la tabla del PC
+  filtroPrev: '', pdfLuego: '', // PC (prueba de diseño): filtro por preventivo y tarjeta del PDF escondida
   form: null,                  // formulario abierto
   sync: { estado: '', msg: '' }, sincronizando: false, otraVez: false, avisos: [],
   avisoInstalar: null
@@ -431,6 +432,170 @@ function irVista(v) {
 
 
 /***********************
+ * PC · PRUEBA DE DISEÑO (tablero de tres columnas). En el celular no cambia nada.
+ ***********************/
+
+const PC_MQ = window.matchMedia ? window.matchMedia('(min-width:1024px)') : { matches: false };
+function esPC() { return PC_MQ.matches; }
+if (PC_MQ.addEventListener) PC_MQ.addEventListener('change', function() { if (S.tecnico && S.sede && codigoAcceso()) pintar(false); });
+
+function fCorta(iso) { const t = fFecha(iso); return String(iso).slice(0, 4) === hoyISO().slice(0, 4) ? t.replace(/ \d{4}$/, '') : t; }
+function iniciales(n) { return String(n || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(function(x) { return x.charAt(0).toUpperCase(); }).join(''); }
+function nombreTipo(t) {
+  return t === 'SAM (planta de aire medicinal)' ? 'SAM' : t === 'Bomba de vacío' ? 'Bombas de vacío' : t === 'Generador de oxígeno' ? 'Generadores de O₂' :
+    t === 'Secador de aire' ? 'Secadores' : t === 'Tanque pulmón' ? 'Tanques pulmón' : t === 'Compresor' ? 'Compresores' : t;
+}
+const COLOR_TIPO = { 'Compresor': '#2F6BFF', 'Bomba de vacío': '#F59E0B', 'SAM (planta de aire medicinal)': '#0EA5E9', 'Generador de oxígeno': '#16A34A', 'Secador de aire': '#7C3AED', 'Tanque pulmón': '#E11D48' };
+
+/** Grupo del preventivo para los anillos y el filtro de la tabla. */
+function grupoPrev(p) {
+  if (p.clase === 'baja') return 'baja';
+  if (p.clase === 'rojo') return 'atrasado';
+  if (p.clase === 'ambar') return p.proximo || /en \d/.test(p.texto) ? 'proximo' : 'sinreg';
+  return 'aldia';
+}
+const GRUPOS_PREV = [['atrasado', 'Atrasados', '#111827'], ['proximo', 'Próximos', '#F97316'], ['sinreg', 'Sin registro', '#2F6BFF'], ['aldia', 'Al día', '#16A34A']];
+
+function chipPrev(p) {
+  const g = grupoPrev(p);
+  const c = g === 'atrasado' ? 'riesgo' : g === 'proximo' ? 'naranja' : g === 'sinreg' ? 'azul' : g === 'baja' ? 'gris' : 'hecho';
+  const t = p.proximo && g !== 'sinreg' ? (p.dias < 0 ? 'Atrasado ' + plural(-p.dias, 'día', 'días') : p.dias === 0 ? 'Hoy' : p.dias <= 30 ? 'En ' + plural(p.dias, 'día', 'días') : fFecha(p.proximo)) : p.texto;
+  return '<span class="pc-estado ' + c + '">' + esc(t) + '</span>';
+}
+
+function anilloPC(n, total, color) {
+  const pc = total ? Math.round(n / total * 100) : 0;
+  return '<span class="pc-anillo" style="background:conic-gradient(' + color + ' ' + pc + '%,#E5E7EB 0)"><b>' + n + '</b></span>';
+}
+
+function htmlEquiposPC() {
+  const todos = equipos().filter(function(e) { return !S.filtroSede || e.sede === S.filtroSede; });
+  const activos = todos.filter(function(e) { return e.estado !== 'Dado de baja'; });
+  const mes = hoyISO().slice(0, 7);
+  const mtsMes = mantenimientos().filter(function(m) {
+    const e = equipos().filter(function(x) { return x.codigo === m.codigo || x.id === m.equipoId; })[0];
+    return String(m.fecha).slice(0, 7) === mes && (!S.filtroSede || (e ? e.sede : m.sede) === S.filtroSede);
+  });
+  const prev = mtsMes.filter(function(m) { return m.tipo === 'Preventivo'; }).length;
+  const func = activos.filter(function(e) { return e.estado === 'Funcionando'; }).length;
+  const conP = activos.map(function(e) { return { e: e, p: preventivo(e) }; });
+  let h = '<div id="franja" class="franja oculto" role="status"></div>';
+  h += '<div class="pc-secc"><h2>Vista general</h2><span class="pc-pildora">' + ico('calendar_month', 's') + esc(fFecha(hoyISO())) + '</span></div>';
+  h += '<section class="pc-tres">' +
+    '<div class="pc-metrica"><div class="pc-met-cab"><span>Equipos activos</span><span style="color:#2F6BFF">' + ico('precision_manufacturing', '', true) + '</span></div><b>' + activos.length + '</b>' +
+      '<span class="pc-sube">↗ ' + (todos.length - activos.length ? plural(todos.length - activos.length, 'dado de baja', 'dados de baja') : 'Ninguno dado de baja') + '</span></div>' +
+    '<div class="pc-metrica"><div class="pc-met-cab"><span>Mantenimientos del mes</span><span style="color:#E11D48">' + ico('build', '', true) + '</span></div><b>' + mtsMes.length + '</b>' +
+      '<span class="pc-sube">↗ ' + plural(prev, 'preventivo', 'preventivos') + ' · ' + (mtsMes.length - prev) + ' otros</span></div>' +
+    '<div class="pc-metrica"><div class="pc-met-cab"><span>Funcionando</span><span style="color:#7C3AED">' + ico('verified', '', true) + '</span></div><b>' + (activos.length ? Math.round(func / activos.length * 100) : 0) + ' %</b>' +
+      '<span class="pc-sube' + (func < activos.length ? ' baja' : '') + '">' + (func < activos.length ? '↘ ' : '↗ ') + func + ' de ' + activos.length + ' equipos</span></div></section>';
+
+  const porAtender = conP.filter(function(x) { const g = grupoPrev(x.p); return g === 'atrasado' || g === 'proximo' || g === 'sinreg'; }).length;
+  h += '<div class="pc-secc"><h2>Preventivos</h2><span class="pc-tenue">' + (porAtender ? plural(porAtender, 'equipo por atender', 'equipos por atender') : 'Todo al día') + '</span></div>';
+  h += '<section class="pc-metrica pc-carga">' + GRUPOS_PREV.map(function(g) {
+    const l = conP.filter(function(x) { return grupoPrev(x.p) === g[0]; });
+    const fechas = l.map(function(x) { return x.p.proximo; }).filter(Boolean).sort();
+    const pie = !l.length ? 'Ninguno' : g[0] === 'atrasado' ? 'Desde ' + fCorta(fechas[0]) : g[0] === 'proximo' ? (fechas[0] ? 'Vence ' + fCorta(fechas[0]) : 'Por horas de uso') :
+      g[0] === 'sinreg' ? 'Falta el primero' : (fechas[0] ? 'Próximo ' + fCorta(fechas[0]) : 'Por horas de uso');
+    return '<button type="button" class="pc-grupo" data-acc="fprev" data-v="' + (S.filtroPrev === g[0] ? '' : g[0]) + '" aria-pressed="' + (S.filtroPrev === g[0]) + '">' + anilloPC(l.length, activos.length, g[2]) +
+      '<span><b>' + g[1] + '</b><em>' + esc(pie) + '</em></span></button>';
+  }).join('') + '</section>';
+
+  const lista = filtrados().filter(function(e) { return !S.filtroPrev || grupoPrev(preventivo(e)) === S.filtroPrev; });
+  const ord = ordenar(lista);
+  h += '<section class="pc-metrica pc-lista"><div class="pc-met-cab"><b class="pc-tit">' + (S.filtroTipo === 'Todos' ? 'Equipos' : esc(nombreTipo(S.filtroTipo))) + ' <small>' + ord.length + '</small></b>' +
+    '<span class="pc-segmento">' + [['', 'Todos']].concat(GRUPOS_PREV).map(function(g) {
+      return '<button type="button" data-acc="fprev" data-v="' + g[0] + '" aria-pressed="' + ((S.filtroPrev || '') === g[0]) + '">' + g[1] + '</button>'; }).join('') + '</span></div>';
+  if (!equipos().length) h += '<div class="vacio">' + ico('home_repair_service', 'l') + '<b>Registra el primer equipo</b>Compresores, bombas de vacío, SAM, generadores de oxígeno… Cada uno con su foto, datos técnicos y plan de mantenimiento.</div>';
+  else if (!ord.length) h += '<div class="vacio"><b>Nada coincide</b>Prueba con otra palabra o quita los filtros.</div>';
+  else {
+    if (!S.selPC || !ord.some(function(x) { return x.e.id === S.selPC; })) S.selPC = ord[0].e.id;
+    h += '<table class="pc-tabla"><thead><tr><th></th><th>Equipo</th><th>Sede · ubicación</th><th>Preventivo</th><th>Código</th></tr></thead><tbody>' + ord.map(function(x) {
+      const e = x.e;
+      return '<tr class="' + (e.id === S.selPC ? 'sel' : '') + '" data-acc="selPC" data-id="' + esc(e.id) + '" tabindex="0">' +
+        '<td style="width:52px">' + miniEquipo(e) + '</td><td><b>' + esc(e.nombre) + '</b><small>' + esc([e.marca, e.modelo].filter(Boolean).join(' ') || e.tipo) + '</small></td>' +
+        '<td>' + esc(e.sede) + '<small>' + esc(e.ubicacion || '') + '</small></td><td>' + chipPrev(x.p) + '</td>' +
+        '<td><span class="pc-codigo">' + esc(e.codigo) + '</span>' + (e.pendiente ? '<small class="pend">por subir</small>' : '') + '</td></tr>';
+    }).join('') + '</tbody></table>';
+  }
+  return h + '</section>';
+}
+
+function fichaPC() {
+  const e = equipo(S.selPC);
+  if (!e) return '<aside class="pc-derecha"><div class="vacio"><b>Elige un equipo</b>Su ficha aparece aquí.</div></aside>';
+  const p = preventivo(e), ms = mantsDe(e), foto = S.minis['EQ:' + e.id];
+  const prog = e.periodicidad === 'Por horas de uso' ? 'Cada ' + num(e.cadaHoras) + ' h' : (e.periodicidad || 'Sin definir');
+  let avance = null;
+  const base = p.ultimo || e.instalacion;
+  if (p.proximo && base) { const tot = diasEntre(base, p.proximo); avance = tot > 0 ? Math.max(0, Math.round(diasEntre(base, hoyISO()) / tot * 100)) : 100; }
+  const icMt = { Preventivo: ['event_available', '#2F6BFF'], Correctivo: ['handyman', '#F59E0B'], 'Inspección': ['search', '#16A34A'] };
+  let h = '<aside class="pc-derecha" aria-label="Ficha del equipo"><div class="pc-perfil"><div class="pc-perfil-fondo"><button type="button" class="pc-lapiz" data-acc="editarEquipo" data-id="' + esc(e.id) + '" aria-label="Editar hoja de vida">' + ico('edit', 's') + '</button></div>' +
+    '<div class="pc-perfil-cuerpo"><span class="pc-foto">' + (imgSegura(foto) ? '<img src="' + foto + '" alt="Foto del equipo">' : ico(ICONO_TIPO[e.tipo] || 'precision_manufacturing', 'l')) + '</span>' +
+    '<b class="pc-nombre">' + esc(e.nombre) + (e.estado === 'Funcionando' ? ' <span style="color:#2F6BFF">' + ico('verified', 's', true) + '</span>' : '') + '</b>' +
+    '<span class="pc-tenue">' + esc(e.codigo) + ' · ' + esc(e.sede) + ' <span class="pc-est ' + (e.estado === 'Funcionando' ? 'ok' : e.estado === 'Fuera de servicio' ? 'mal' : 'obs') + '">' + esc(e.estado || 'Sin estado') + '</span></span>' +
+    '<div class="pc-perfil-botones"><button type="button" data-acc="editarEquipo" data-id="' + esc(e.id) + '">' + ico('edit', 's') + 'Editar</button>' +
+    '<button type="button" data-acc="equipo" data-id="' + esc(e.id) + '">' + ico('description', 's') + 'Completa</button>' +
+    '<button type="button" data-acc="nuevoMant" data-id="' + esc(e.id) + '">' + ico('build', 's') + 'Mant.</button></div></div></div>';
+  h += '<div class="pc-dato-doble"><div><span>Instalado</span><b>' + esc(fFecha(e.instalacion) || '—') + '</b></div><div><span>Periodicidad</span><b>' + esc(prog) + '</b></div></div>';
+  h += '<div class="pc-avance"><div><span>' + (p.proximo ? 'Hacia el próximo preventivo' : 'Preventivo') + '</span><b>' + (avance == null ? '' : Math.min(avance, 999) + ' %') + '</b></div>' +
+    (avance == null ? '' : '<div class="pc-avance-barra' + (avance >= 100 ? ' pasado' : '') + '"><i style="width:' + Math.min(100, avance) + '%"></i></div>') +
+    '<span class="pc-tenue">' + esc(p.proximo ? 'Próximo: ' + fFecha(p.proximo) + (p.ultimo ? ' · último ' + fFecha(p.ultimo) : '') : p.texto) + '</span></div>';
+  h += '<h3 class="pc-lado-tit">Historial <small>' + ms.length + '</small></h3>' + (ms.length ? '<ul class="pc-historial">' + ms.slice(0, 4).map(function(m) {
+    const i = icMt[m.tipo] || ['build', '#6B7280'];
+    const quien = m.quien === 'Proveedor' ? (m.empresa || 'Proveedor') : nombresTec(m.tecnico);
+    return '<li><span class="pc-cuadro" style="color:' + i[1] + '">' + ico(i[0], 's') + '</span><span><b>' + esc(m.tipo + (m.descripcion ? ' · ' + m.descripcion : '')) + '</b><em>' +
+      esc(fFecha(m.fecha) + ' · ' + quien + (m.horometro !== '' && m.horometro != null ? ' · ' + num(m.horometro) + ' h' : '')) + (m.pendiente ? ' · por subir' : '') + '</em></span></li>';
+  }).join('') + '</ul>' : '<p class="pc-tenue">Aún no hay mantenimientos registrados.</p>');
+  if (S.pdfLuego !== e.id) h += '<div class="pc-resumen"><span class="pc-cuadro">' + ico('picture_as_pdf', 's') + '</span><b>Hoja de vida lista</b><p>' + FORMATO.codigo + ' con foto, datos técnicos y ' + plural(ms.length, 'intervención', 'intervenciones') + '.</p>' +
+    '<div class="pc-fila-botones"><button type="button" class="pc-negro" data-acc="pdf" data-id="' + esc(e.id) + '">' + ico('picture_as_pdf', 's') + 'Generar PDF</button><button type="button" class="pc-blanco" data-acc="pdfLuego" data-id="' + esc(e.id) + '">Luego</button></div></div>';
+  return h + '</aside>';
+}
+
+const VISTAS_PC = [['equipos', 'Equipos', 'precision_manufacturing'], ['mantenimientos', 'Mantenimientos', 'build'], ['ajustes', 'Ajustes', 'settings']];
+
+function marcoPC(html, tope) {
+  const v = VISTAS_PC.filter(function(x) { return x[0] === S.vista; })[0] || VISTAS_PC[0];
+  const enLista = !tope && S.vista === 'equipos';
+  const titulo = tope ? (tope.tipo === 'equipo' ? (equipo(tope.id) || {}).nombre || 'Equipo' : tope.tipo === 'formMant' ? 'Registrar mantenimiento' : 'Hoja de vida del equipo') : v[1];
+  const n = S.cola.length, todos = equipos();
+  const conteo = function(t) { return todos.filter(function(e) { return (!S.filtroSede || e.sede === S.filtroSede) && (t === 'Todos' || e.tipo === t); }).length; };
+  const tipos = ['Todos'].concat(S.cfg.tipos.filter(function(t) { return todos.some(function(e) { return e.tipo === t; }); }));
+  const sel = enLista ? equipo(S.selPC) : null;
+  const bv = function(x, texto) {
+    const act = S.vista === x[0] && !tope;
+    return '<button type="button" data-acc="vista" data-v="' + x[0] + '" aria-current="' + (act ? 'page' : 'false') + '"' + (texto ? '' : ' aria-label="' + x[1] + '" title="' + x[1] + '"') + '>' + ico(x[2], texto ? 's' : '', act) +
+      (texto ? '<span>' + x[1] + '</span>' + (x[0] === 'equipos' ? '<small>' + todos.length + '</small>' : x[0] === 'mantenimientos' ? '<small>' + mantenimientos().length + '</small>' : x[0] === 'ajustes' && n ? '<small class="pc-punto">' + n + '</small>' : '') : '') + '</button>';
+  };
+  return '<div class="tz' + (enLista ? ' con-derecha' : '') + '">' +
+    '<nav class="pc-riel" aria-label="Accesos rápidos"><img class="pc-logo" src="logo.jpg" alt="Clínica Reina Catalina">' + VISTAS_PC.map(function(x) { return bv(x, false); }).join('') +
+    '<span class="pc-espacio"></span><a href="https://geol21.github.io/" aria-label="Abrir el portal de apps" title="Portal de apps">' + ico('apps') + '</a>' +
+    '<button type="button" data-acc="sync" aria-label="Subir cambios" title="' + (n ? plural(n, 'cambio sin subir', 'cambios sin subir') : 'Todo subido') + '">' + ico(n ? 'cloud_off' : 'cloud_done') + '</button>' +
+    '<button type="button" class="pc-yo" data-acc="vista" data-v="ajustes" title="' + esc(nombreBonito(S.tecnico)) + '">' + esc(iniciales(nombreBonito(S.tecnico))) + '</button></nav>' +
+    '<nav class="pc-lateral" aria-label="Secciones"><div class="pc-lat-cab"><b>Hojas de vida</b><span>' + ico('home_repair_service', 's') + '</span></div>' +
+    '<button type="button" class="pc-nuevo" data-acc="nuevoEquipo">' + ico('add', 's') + '<span>Nuevo equipo</span></button>' +
+    '<div class="pc-lat-lista">' + VISTAS_PC.map(function(x) { return bv(x, true); }).join('') + '</div>' +
+    '<div class="pc-lat-grupo">Tipo de equipo</div><div class="pc-lat-lista arbol">' + tipos.map(function(t) {
+      const act = S.filtroTipo === t && S.vista === 'equipos' && !tope;
+      return '<button type="button" data-acc="ftipoPC" data-v="' + esc(t) + '" aria-current="' + act + '"><span style="color:' + (COLOR_TIPO[t] || '#6B7280') + '">' + ico(ICONO_TIPO[t] || 'apps', 's') + '</span><span>' + esc(t === 'Todos' ? 'Todos los equipos' : nombreTipo(t)) + '</span><small>' + conteo(t) + '</small></button>';
+    }).join('') + '</div>' +
+    '<div class="pc-lat-grupo">Sedes</div><div class="pc-lat-lista">' + [''].concat(S.cfg.sedes).map(function(s, i) {
+      return '<button type="button" data-acc="fsede" data-v="' + esc(s) + '" aria-current="' + (S.filtroSede === s) + '"><span style="color:' + (['#16A34A', '#2F6BFF', '#F97316'][i] || '#6B7280') + '">' + ico('location_on', 's') + '</span><span>' + esc(s || 'Las dos sedes') + '</span></button>';
+    }).join('') + '</div><span class="pc-espacio"></span>' +
+    '<div class="pc-lat-tarjeta"><div><b>' + (n ? plural(n, 'cambio sin subir', 'cambios sin subir') : 'Todo subido') + '</b><span class="pc-chip ' + (n ? 'ambar' : 'ok') + '">' + (n ? 'Pendiente' : 'Al día') + '</span></div>' +
+    '<p class="pc-tenue">' + esc(nombreBonito(S.tecnico)) + ' · ' + esc(S.sede) + '</p>' + (n ? '<button type="button" class="pc-enlace" data-acc="sync">Subir ahora</button>' : '') + '</div></nav>' +
+    '<main class="pc-centro"><header class="pc-barra"><span class="pc-migas">Hojas de vida <span>/</span> <b>' + esc(titulo) + '</b></span>' +
+    (enLista ? '<label class="pc-buscador">' + ico('search', 's') + '<span class="sr">Buscar</span><input id="buscar" type="search" placeholder="Buscar equipo, serie o código" value="' + esc(S.buscar) + '" autocomplete="off"></label>' : '<span class="pc-espacio"></span>') +
+    '<span class="pc-botones">' + (sel ? '<button type="button" class="pc-blanco" data-acc="pdf" data-id="' + esc(sel.id) + '">' + ico('picture_as_pdf', 's') + 'PDF</button><button type="button" class="pc-negro" data-acc="nuevoMant" data-id="' + esc(sel.id) + '">' + ico('build', 's') + 'Registrar mantenimiento</button>'
+      : !tope ? '<button type="button" class="pc-negro" data-acc="nuevoEquipo">' + ico('add', 's') + 'Nuevo equipo</button>' : '') + '</span></header>' +
+    '<div class="pc-pagina">' + (tope ? '' : '<div class="pc-titulo"><h1>' + ico(v[2], 's') + esc(v[1]) + '</h1><span class="pc-tenue">' + ico('schedule', 's') + ' <span data-reloj>' + hora() + '</span></span>' +
+      '<span class="pc-pildora">' + ico('person', 's') + esc(nombreBonito(S.tecnico)) + '</span></div>' +
+      '<div class="pc-pestanas" role="tablist">' + VISTAS_PC.map(function(x) { return '<button type="button" role="tab" data-acc="vista" data-v="' + x[0] + '" aria-selected="' + (S.vista === x[0]) + '">' + ico(x[2], 's') + x[1] + '</button>'; }).join('') +
+      '<span class="pc-espacio"></span><span class="pc-segmento">' + [''].concat(S.cfg.sedes).map(function(s) { return '<button type="button" data-acc="fsede" data-v="' + esc(s) + '" aria-pressed="' + (S.filtroSede === s) + '">' + esc(s || 'Las dos sedes') + '</button>'; }).join('') + '</span></div>') +
+    '<div class="cuerpo' + (tope || S.vista !== 'equipos' ? ' pc-viejo' : '') + '">' + html + '</div></div></main>' + (enLista ? fichaPC() : '') + '</div>';
+}
+
+
+/***********************
  * PINTAR
  ***********************/
 
@@ -449,7 +614,8 @@ function pintar(arriba) {
   else if (S.vista === 'ajustes') html = htmlAjustes();
   else html = htmlEquipos();
   const sinNav = interna && tope.tipo.indexOf('form') === 0;
-  app().innerHTML = '<div class="marco ' + (sinNav ? 'sin-nav' : '') + '">' + htmlNav() +
+  if (esPC()) app().innerHTML = marcoPC(!tope && S.vista === 'equipos' ? htmlEquiposPC() : html, tope);
+  else app().innerHTML = '<div class="marco ' + (sinNav ? 'sin-nav' : '') + '">' + htmlNav() +
     '<div class="principal"><div class="cuerpo' + (arriba ? ' entra' : '') + '">' + html + '</div></div></div>';
   enlazar();
   pintarFranja();
@@ -1340,10 +1506,13 @@ function accion(a, b) {
     case 'vista': irVista(b.dataset.v); break;
     case 'volver': volver(); break;
     case 'fsede': S.filtroSede = b.dataset.v; pintar(false); break;
+    case 'fprev': S.filtroPrev = b.dataset.v; pintar(false); break;
+    case 'ftipoPC': S.filtroTipo = b.dataset.v; if (S.vista !== 'equipos' || S.pila.length) irVista('equipos'); else pintar(false); break;
+    case 'pdfLuego': S.pdfLuego = b.dataset.id; pintar(false); break;
     case 'ftipo': S.filtroTipo = b.dataset.v; pintar(false); break;
     case 'fmt': S.filtroMt = b.dataset.v; pintar(false); break;
     case 'equipo': abrir({ tipo: 'equipo', id: b.dataset.id }); break;
-    case 'selPC': S.selPC = b.dataset.id; pintar(false); break;
+    case 'selPC': S.selPC = b.dataset.id; if (esPC() && window.innerWidth < 1280) abrir({ tipo: 'equipo', id: b.dataset.id }); else pintar(false); break;   // sin columna derecha se abre la ficha completa
     case 'nuevoEquipo': abrirFormEquipo(); break;
     case 'editarEquipo': abrirFormEquipo(b.dataset.id); break;
     case 'nuevoMant': abrirFormMant(b.dataset.id); break;
